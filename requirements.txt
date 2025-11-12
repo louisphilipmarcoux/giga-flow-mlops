@@ -8,3 +8,5 @@ kafka-python         # For the producer/consumer
 psycopg2-binary      # If using PostgreSQL 
 ipykernel
 aiokafka
+asyncpg   # Asynchronous driver for PostgreSQL
+sqlalchemy  # For creating a connection pool and defining a table

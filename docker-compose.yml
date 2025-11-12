@@ -10,7 +10,7 @@ services:
     image: confluentinc/cp-kafka:7.3.0
     container_name: kafka
     ports:
-      - "9092:9092"
+      - "9092:9092" # Expose Kafka to our host machine
     depends_on:
       - zookeeper
     environment:
@@ -20,3 +20,19 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  # --- NEW DATABASE SERVICE ---
+  postgres_db:
+    image: postgres:14-alpine
+    container_name: postgres_db
+    ports:
+      - "5432:5432" # Expose Postgres to our host machine
+    environment:
+      POSTGRES_USER: gigaflow
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sentiment_db
+    volumes:
+      - postgres-data:/var/lib/postgresql/data # Persist data
+
+volumes:
+  postgres-data: # This volume ensures our data survives container restarts
