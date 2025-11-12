@@ -1,7 +1,10 @@
 services:
+  # --- INFRASTRUCTURE SERVICES ---
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
     container_name: zookeeper
+    networks:
+      - gigaflow-net
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -9,30 +12,114 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.3.0
     container_name: kafka
-    ports:
-      - "9092:9092" # Expose Kafka to our host machine
+    networks:
+      - gigaflow-net
     depends_on:
       - zookeeper
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
-  # --- NEW DATABASE SERVICE ---
   postgres_db:
     image: postgres:14-alpine
     container_name: postgres_db
+    networks:
+      - gigaflow-net
     ports:
-      - "5432:5432" # Expose Postgres to our host machine
+      - "5432:5432"
     environment:
       POSTGRES_USER: gigaflow
       POSTGRES_PASSWORD: password
       POSTGRES_DB: sentiment_db
     volumes:
-      - postgres-data:/var/lib/postgresql/data # Persist data
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gigaflow -d sentiment_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- APPLICATION SERVICES ---
+  mlflow_server:
+    build:
+      context: .
+      dockerfile: mlflow.Dockerfile
+    container_name: mlflow_server
+    networks:
+      - gigaflow-net
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./src/notebooks/mlruns:/mlruns
+      - mlflow-db:/db
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.settimeout(2); result = s.connect_ex((\"localhost\", 5000)); s.close(); exit(0 if result == 0 else 1)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - sqlite:////db/mlflow.db
+      - --registry-store-uri  # <-- The registry flag
+      - sqlite:////db/mlflow.db
+      - --artifacts-destination # <-- The modern artifact flag
+      - file:///mlruns
+      - --serve-artifacts
+
+  model_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: model_service
+    networks:
+      - gigaflow-net
+    depends_on:
+      kafka:
+        condition: service_started
+      postgres_db:
+        condition: service_healthy
+      mlflow_server:
+        condition: service_healthy
+    volumes:
+      - ./src/notebooks/mlruns:/mlruns
+    environment:
+      KAFKA_SERVER: "kafka:29092"
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}"
+      MLFLOW_TRACKING_URI: "http://mlflow_server:5000"
+    command: ["/bin/sh", "-c", "uvicorn src.model_service.main:app --host 0.0.0.0 --port 8000"]
+
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: producer
+    restart: on-failure
+    networks:
+      - gigaflow-net
+    depends_on:
+      - kafka
+    volumes:
+      - ./src/notebooks/mlruns:/mlruns
+    environment:
+      KAFKA_SERVER: "kafka:29092"
+    command: ["/bin/sh", "-c", "python -u src/producer/producer.py"]
+
+# --- NETWORKING ---
+networks:
+  gigaflow-net:
+    driver: bridge
 
 volumes:
-  postgres-data: # This volume ensures our data survives container restarts
+  postgres-data:
+  mlflow-db:
