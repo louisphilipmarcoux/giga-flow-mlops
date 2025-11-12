@@ -1,0 +1,10 @@
+# requirements.txt
+pandas
+scikit-learn         # For the simple model [cite: 16, 19]
+mlflow               # For tracking [cite: 8]
+fastapi              # For the API [cite: 7]
+uvicorn[standard]    # To run FastAPI
+kafka-python         # For the producer/consumer 
+psycopg2-binary      # If using PostgreSQL 
+ipykernel
+# Add others as needed, e.g., 'transformers'
