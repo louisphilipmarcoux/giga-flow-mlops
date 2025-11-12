@@ -2,56 +2,86 @@ import asyncio
 import json
 import mlflow
 import pandas as pd
+import datetime
 from fastapi import FastAPI
 from aiokafka import AIOKafkaConsumer
 
-# --- Configuration (UPDATED) ---
+# --- NEW DB IMPORTS ---
+import sqlalchemy
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import Column, Integer, String, Float, DateTime
+
+# --- Configuration ---
 KAFKA_TOPIC = "giga-flow-messages"
 KAFKA_SERVER = "localhost:9092"
 MLFLOW_MODEL_NAME = "giga-flow-sentiment"
-MLFLOW_MODEL_ALIAS = "champion" # Use the alias we just set
+MLFLOW_MODEL_ALIAS = "champion"
+
+# --- NEW DATABASE CONFIG ---
+DATABASE_URL = "postgresql+asyncpg://gigaflow:password@localhost:5432/sentiment_db"
+
+# --- SQLAlchemy Setup ---
+engine = create_async_engine(DATABASE_URL, echo=True)
+Base = declarative_base()
+AsyncSessionLocal = sessionmaker(
+    bind=engine, class_=AsyncSession, expire_on_commit=False
+)
+
+# --- Define Predictions Table (ORM Model) ---
+class SentimentPrediction(Base):
+    __tablename__ = "sentiment_predictions"
+    id = Column(Integer, primary_key=True, index=True)
+    text = Column(String, index=True)
+    sentiment_score = Column(Float) # Use Float for scores, or Integer for 0/1
+    sentiment_label = Column(String)
+    message_timestamp = Column(DateTime)
+    processed_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 # --- FastAPI App ---
 app = FastAPI(title="GigaFlow Model Service")
 
-# --- Model Loading ---
+# --- Model & DB Globals ---
 model = None
+db_engine = None
+
+async def create_db_and_tables():
+    """Create the table in the database."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 @app.on_event("startup")
 async def startup_event():
     """
     On app startup:
-    1. Load the 'champion' model from MLflow Registry using its alias.
-    2. Start the Kafka consumer background task.
+    1. Create database tables.
+    2. Load the MLflow model.
+    3. Start the Kafka consumer.
     """
-    global model
+    global model, engine
+    
+    print("Creating database tables...")
+    await create_db_and_tables()
+    print("Database tables created.")
+
     print("Loading MLflow model...")
-    
-    # --- THIS IS THE UPDATED URI ---
-    # We now use the format models:/<name>@<alias>
     model_uri = f"models:/{MLFLOW_MODEL_NAME}@{MLFLOW_MODEL_ALIAS}"
-    # -------------------------------
-    
     model = mlflow.pyfunc.load_model(model_uri)
-    
     print(f"Model {MLFLOW_MODEL_NAME} (Alias: {MLFLOW_MODEL_ALIAS}) loaded successfully.")
     
-    # Start the Kafka consumer in the background
     print("Starting Kafka consumer...")
     asyncio.create_task(consume_messages())
 
 # --- Health Check Endpoint ---
 @app.get("/health")
 async def health_check():
-    """
-    Simple health check to confirm the service is running.
-    """
     return {"status": "ok"}
 
-# --- Kafka Consumer Logic ---
+# --- Kafka Consumer Logic (UPDATED) ---
 async def consume_messages():
     """
-    Asynchronous background task to consume messages from Kafka.
+    Asynchronous background task to consume messages from Kafka
+    and write predictions to PostgreSQL.
     """
     consumer = AIOKafkaConsumer(
         KAFKA_TOPIC,
@@ -64,29 +94,33 @@ async def consume_messages():
     
     try:
         async for msg in consumer:
-            # A new message has arrived
             print(f"\nReceived message: {msg.value}")
-            
-            # Extract the text
             text_input = msg.value.get('text')
+            msg_timestamp = msg.value.get('timestamp')
             
             if text_input and model:
-                # 1. Prepare data for the model (it expects a DataFrame)
                 data_df = pd.DataFrame({'text': [text_input]})
-                
-                # 2. Run inference
                 prediction = model.predict(data_df)
-                sentiment = 'Positive' if prediction[0] == 1 else 'Negative'
                 
-                # 3. Process result
-                # In Phase 3, we will write this to PostgreSQL.
-                # For now, we just print it.
-                print(f"Prediction: '{text_input}' -> {sentiment}")
+                # Convert prediction to friendly format
+                sentiment_score = float(prediction[0]) # Assuming model returns 0 or 1
+                sentiment_label = 'Positive' if sentiment_score == 1.0 else 'Negative'
+                
+                print(f"Prediction: '{text_input}' -> {sentiment_label}")
+
+                # --- NEW: Write to Database ---
+                async with AsyncSessionLocal() as session:
+                    async with session.begin():
+                        prediction_record = SentimentPrediction(
+                            text=text_input,
+                            sentiment_score=sentiment_score,
+                            sentiment_label=sentiment_label,
+                            message_timestamp=datetime.datetime.fromtimestamp(msg_timestamp)
+                        )
+                        session.add(prediction_record)
+                        await session.commit()
+                print("Prediction saved to database.")
                 
     finally:
-        # Clean up
         await consumer.stop()
         print("Kafka consumer stopped.")
-
-# To run this app (from the root folder):
-# uvicorn src.model_service.main:app --reload
