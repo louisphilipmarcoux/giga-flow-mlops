@@ -19,12 +19,13 @@ jobs:
 
       - name: 1. Run the Training Notebook
         id: training
+        working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
           echo "Starting model training..."
             
           # Capture output to a variable
-          $output = (docker-compose -p giga-flow-mlops exec -T -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py")
+          $output = (docker-compose -f docker-compose.yml -p giga-flow-mlops exec -T -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py")
           
           # Write full output to the action log
           echo $output
@@ -44,6 +45,7 @@ jobs:
           echo "run_id=$run_id" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: 2. Run the Smart Promotion Script
+        working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
           echo "Starting model promotion check..."
@@ -57,6 +59,7 @@ jobs:
           python scripts/promote_model.py
       - name: 3. (Optional) Restart the Model Service
         if: success()
+        working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
           echo "Restarting model_service to load the new champion model..."
