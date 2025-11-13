@@ -73,7 +73,7 @@ jobs:
           
           # Set environment variables for this step
           $env:NEW_RUN_ID = "${{ steps.training.outputs.run_id }}"
-          $env:MLFLOW_TRACKING_URI = "http://mlflow_server:5000"
+          $env:MLFLOW_TRACKING_URI = "http://localhost:5000"
           
           # Run the Python script
           python scripts/promote_model.py
