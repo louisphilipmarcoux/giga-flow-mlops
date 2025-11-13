@@ -5,12 +5,11 @@ import datetime
 import os
 from fastapi import FastAPI
 from aiokafka import AIOKafkaConsumer
-
-# --- NEW DB IMPORTS ---
 import sqlalchemy
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, Integer, String, Float, DateTime
+from starlette_prometheus import PrometheusMiddleware, metrics
 
 # --- Configuration ---
 KAFKA_TOPIC = "giga-flow-messages"
@@ -42,6 +41,8 @@ class SentimentPrediction(Base):
 
 # --- FastAPI App ---
 app = FastAPI(title="GigaFlow Model Service")
+
+app.add_middleware(PrometheusMiddleware)
 
 # --- Model & DB Globals ---
 model = None
