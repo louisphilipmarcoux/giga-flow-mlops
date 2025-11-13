@@ -111,9 +111,29 @@ services:
       - kafka
     volumes:
       - ./src/notebooks/mlruns:/mlruns
+      - ./data:/data
     environment:
       KAFKA_SERVER: "kafka:29092"
     command: ["/bin/sh", "-c", "python -u src/producer/producer.py"]
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard.Dockerfile
+    container_name: dashboard
+    networks:
+      - gigaflow-net
+    ports:
+      - "8501:8501"
+    environment:
+      # Pass DB credentials to the dashboard
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres_db # Use the service name
+    depends_on:
+      postgres_db:
+        condition: service_healthy
 
 # --- NETWORKING ---
 networks:
