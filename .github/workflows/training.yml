@@ -35,11 +35,15 @@ jobs:
           #    This avoids OOM issues by not sharing memory with the running producer
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
 
-          # 2. Read the log file as an array of lines
-          $output = Get-Content -Path output.log
-          
-          # Write full output to the action log
+          # 2. Read the log file content
+          $output_lines = Get-Content -Path output.log
           echo $output_lines | Out-String
+
+          #    Check the exit code of the docker-compose command
+          if ($LASTEXITCODE -ne 0) {
+              echo "::error::The docker-compose command failed. See log above."
+              exit 1
+          }
 
           # 4. Clean up the temp file
           Remove-Item output.log
