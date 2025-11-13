@@ -43,6 +43,11 @@ jobs:
 
           # 4. Clean up the temp file
           Remove-Item output.log
+
+          if ($LASTEXITCODE -ne 0) {
+              echo "::error::The training script failed. See log above for details."
+              exit 1
+          }
           
           # Find the run_id line and extract the ID
           $run_id_line = ($output | Select-String 'MLFLOW_RUN_ID=')
