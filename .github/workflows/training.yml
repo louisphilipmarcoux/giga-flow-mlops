@@ -14,41 +14,45 @@ jobs:
 
       - name: 1. Run the Training Notebook
         id: training
-        shell: bash
+        shell: pwsh
         run: |
           echo "Starting model training..."
-          # We use -T to disable pseudo-TTY, which is required for non-interactive scripts [cite: 50]
-          # We capture the output of the exec command
-          output=$(docker-compose exec -T -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py")
+            
+          # Capture output to a variable
+          $output = (docker-compose exec -T -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py")
           
-          echo "$output"
+          # Write full output to the action log
+          echo $output
           
-          # This line finds the "MLFLOW_RUN_ID=..." print statement from our notebook
-          run_id=$(echo "$output" | grep 'MLFLOW_RUN_ID=' | cut -d'=' -f2)
+          # Find the run_id line and extract the ID
+          $run_id_line = ($output | Select-String 'MLFLOW_RUN_ID=')
           
-          if [ -z "$run_id" ]; then
+          if (-not $run_id_line) {
             echo "::error::Could not find MLFLOW_RUN_ID in training output."
             exit 1
-          fi
+          }
           
+          $run_id = $run_id_line.Line.Split('=')[1]
           echo "Found new run ID: $run_id"
-          echo "run_id=$run_id" >> $GITHUB_OUTPUT
+          
+          # Set the GitHub Actions output variable
+          echo "run_id=$run_id" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: 2. Run the Smart Promotion Script
-        shell: bash
+        shell: pwsh
         run: |
           echo "Starting model promotion check..."
-          # Install mlflow client, which is all this script needs
           pip install mlflow
           
-          # Pass the run_id and tracking URI to the promotion script
-          NEW_RUN_ID=${{ steps.training.outputs.run_id }} \
-          MLFLOW_TRACKING_URI=http://mlflow_server:5000 \
+          # Set environment variables for this step
+          $env:NEW_RUN_ID = "${{ steps.training.outputs.run_id }}"
+          $env:MLFLOW_TRACKING_URI = "http://mlflow_server:5000"
+          
+          # Run the Python script
           python scripts/promote_model.py
-
       - name: 3. (Optional) Restart the Model Service
         if: success()
-        shell: bash
+        shell: pwsh
         run: |
           echo "Restarting model_service to load the new champion model..."
           docker-compose restart model_service
