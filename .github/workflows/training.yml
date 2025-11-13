@@ -31,8 +31,9 @@ jobs:
         run: |
           echo "Starting model training..."
             
-          # 1. Run command, redirect ALL output (stdout & stderr) to a temp file
-          docker exec -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
+          # 1. Use `docker-compose run` to start a NEW, clean container for training
+          #    This avoids OOM issues by not sharing memory with the running producer
+          docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
 
           # 2. Read the entire file content into the $output variable
           $output = Get-Content -Path output.log -Raw
