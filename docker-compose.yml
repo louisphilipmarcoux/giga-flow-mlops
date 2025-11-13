@@ -16,10 +16,16 @@ services:
       - gigaflow-net
     depends_on:
       - zookeeper
+    healthcheck:
+      test: ["CMD-SHELL", "cub kafka-ready -b kafka:29092 1 60"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
@@ -135,6 +141,67 @@ services:
       postgres_db:
         condition: service_healthy
 
+  kafka_exporter:
+    image: danielqsj/kafka-exporter:v1.7.0
+    container_name: kafka_exporter
+    networks:
+      - gigaflow-net
+    ports:
+      - "9308:9308"
+    # Connects to the kafka:29092 listener
+    command: ["--kafka.server=kafka:29092"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.47.2
+    container_name: prometheus
+    networks:
+      - gigaflow-net
+    ports:
+      - "9090:9090"
+    volumes:
+      # Mount the config file you just made
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    depends_on:
+      - kafka_exporter
+      - model_service
+
+  grafana:
+    image: grafana/grafana-oss:9.5.3
+    container_name: grafana
+    networks:
+      - gigaflow-net
+    ports:
+      # Grafana's port 
+      - "3000:3000"
+    user: "472:0"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: cadvisor
+    networks:
+      - gigaflow-net
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    depends_on:
+      - model_service
+      - producer
+      - mlflow_server
+      - postgres_db
+
 # --- NETWORKING ---
 networks:
   gigaflow-net:
@@ -143,3 +210,5 @@ networks:
 volumes:
   postgres-data:
   mlflow-db:
+  prometheus-data:
+  grafana-data:

@@ -12,3 +12,4 @@ asyncpg   # Asynchronous driver for PostgreSQL
 sqlalchemy  # For creating a connection pool and defining a table
 mlflow==2.9.2
 nbconvert
+starlette-prometheus
