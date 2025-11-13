@@ -39,14 +39,14 @@ This pipeline has a two-phase setup:
 
 Before you begin, ensure your requirements.txt file (used by Dockerfile) includes the correct mlflow version to match the server and the nbconvert package for running the training script.
 
-# **requirements.txt**
+### **requirements.txt**
 
 mlflow==2.9.2  
 nbconvert
 
-# **... other packages like fastapi, pandas, aiokafka, etc.**
+### **... other packages like fastapi, pandas, aiokafka, etc.**
 
-\#\#\# Phase 1: Start All Services
+### Phase 1: Start All Services
 
 1\.  Build and start all services in detached mode:  
     \`\`\`bash  
@@ -55,13 +55,13 @@ nbconvert
 
 2\.  At this point, the \`model\_service\` will be in a crash loop. You can see this by running \`docker-compose logs \-f model\_service\`. It will show an error like \`Registered model alias champion not found\`. \*\*This is expected.\*\*
 
-\#\#\# Phase 2: Train and Deploy the First Model
+### Phase 2: Train and Deploy the First Model
 
 You must now run the training script \*inside\* one of the running containers to register the first model.
 
 1\.  Open a new terminal and "exec" into the \`producer\` container. We pass the \`MLFLOW\_TRACKING\_URI\` environment variable so the script knows where to find the MLflow server.  
     \`\`\`bash  
-    docker-compose exec \-e MLFLOW\_TRACKING\_URI=http://mlflow\_server:5000 producer /bin/bash  
+    docker-compose exec \-e MLFLOW\_TRACKING\_URI=<http://mlflow\_server:5000> producer /bin/bash  
     \`\`\`
 
 2\.  Inside the container, convert the Jupyter Notebook to a Python script:  
@@ -77,11 +77,11 @@ You must now run the training script \*inside\* one of the running containers to
 
 \---
 
-\#\# ✅ Verify It's Working
+## ✅ Verify It's Working
 
 Once the training script is finished, the \`model\_service\` (on its next automatic restart) will successfully download the "champion" model and begin processing messages.
 
-\#\#\# 1\. Check the Service Logs
+### 1\. Check the Service Logs
 
 Check the logs for the \`model\_service\`:  
 \`\`\`bash  
