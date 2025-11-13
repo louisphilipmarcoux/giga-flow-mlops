@@ -49,15 +49,16 @@ jobs:
               exit 1
           }
           
-          # Find the run_id line and extract the ID
-          $run_id_line = ($output | Select-String 'MLFLOW_RUN_ID=')
+          # Use a specific regex to find the hexadecimal run ID
+          $match = $output | Select-String -Pattern 'MLFLOW_RUN_ID=([a-f0-9]+)'
           
           if (-not $run_id_line) {
             echo "::error::Could not find MLFLOW_RUN_ID in training output."
             exit 1
           }
           
-          $run_id = $run_id_line.Line.Split('=')[1]
+          # Extract the matched group
+          $run_id = $match.Matches[0].Groups[1].Value
           echo "Found new run ID: $run_id"
           
           # Set the GitHub Actions output variable
