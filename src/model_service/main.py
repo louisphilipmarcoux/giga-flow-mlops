@@ -44,6 +44,8 @@ app = FastAPI(title="GigaFlow Model Service")
 
 app.add_middleware(PrometheusMiddleware)
 
+app.add_route("/metrics", metrics)
+
 # --- Model & DB Globals ---
 model = None
 db_engine = None
@@ -109,7 +111,8 @@ async def consume_messages():
             consumer = AIOKafkaConsumer(
                 KAFKA_TOPIC,
                 bootstrap_servers=KAFKA_SERVER,
-                value_deserializer=lambda v: json.loads(v.decode('utf-8'))
+                value_deserializer=lambda v: json.loads(v.decode('utf-8')),
+                group_id="aiokafka-consumer"
             )
             # Start the consumer. This is the part that will fail if Kafka isn't ready.
             await consumer.start()
