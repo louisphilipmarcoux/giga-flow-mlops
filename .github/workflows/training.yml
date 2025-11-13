@@ -16,8 +16,15 @@ jobs:
     steps:
       - name:  checkout code
         uses: actions/checkout@v4
+      
+      - name: 1. DEBUG - List all Docker containers
+        working-directory: ${{ github.workspace }}
+        shell: pwsh
+        run: |
+          echo "Listing all Docker containers visible to the runner..."
+          docker ps -a
 
-      - name: 1. Run the Training Notebook
+      - name: 2. Run the Training Notebook
         id: training
         working-directory: ${{ github.workspace }}
         shell: pwsh
@@ -44,7 +51,7 @@ jobs:
           # Set the GitHub Actions output variable
           echo "run_id=$run_id" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: 2. Run the Smart Promotion Script
+      - name: 3. Run the Smart Promotion Script
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
@@ -57,7 +64,7 @@ jobs:
           
           # Run the Python script
           python scripts/promote_model.py
-      - name: 3. (Optional) Restart the Model Service
+      - name: 4. (Optional) Restart the Model Service
         if: success()
         working-directory: ${{ github.workspace }}
         shell: pwsh
