@@ -25,7 +25,7 @@ jobs:
           echo "Starting model training..."
             
           # Capture output to a variable
-          $output = (docker-compose -f docker-compose.yml -p giga-flow-mlops exec -T -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py")
+          $output = (docker exec -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py")
           
           # Write full output to the action log
           echo $output
@@ -63,4 +63,4 @@ jobs:
         shell: pwsh
         run: |
           echo "Restarting model_service to load the new champion model..."
-          docker-compose -p giga-flow-mlops restart model_service
+          docker restart model_service
