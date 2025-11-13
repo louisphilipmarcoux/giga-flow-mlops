@@ -32,3 +32,6 @@ docker-compose.yml.bak
 
 # GitHub Self-Hosted Runner
 actions-runner/
+
+# Ignore temp data from training script
+training_data.parquet
