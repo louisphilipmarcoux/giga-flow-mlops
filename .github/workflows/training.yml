@@ -32,7 +32,7 @@ jobs:
           echo "Starting model training..."
             
           # Capture output to a variable
-          $output = (docker exec -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py")
+          $output = docker exec -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py" 2>&1
           
           # Write full output to the action log
           echo $output
