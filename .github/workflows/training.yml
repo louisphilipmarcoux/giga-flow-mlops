@@ -14,6 +14,7 @@ jobs:
 
       - name: 1. Run the Training Notebook
         id: training
+        shell: bash
         run: |
           echo "Starting model training..."
           # We use -T to disable pseudo-TTY, which is required for non-interactive scripts [cite: 50]
@@ -34,6 +35,7 @@ jobs:
           echo "run_id=$run_id" >> $GITHUB_OUTPUT
 
       - name: 2. Run the Smart Promotion Script
+        shell: bash
         run: |
           echo "Starting model promotion check..."
           # Install mlflow client, which is all this script needs
@@ -46,6 +48,7 @@ jobs:
 
       - name: 3. (Optional) Restart the Model Service
         if: success()
+        shell: bash
         run: |
           echo "Restarting model_service to load the new champion model..."
           docker-compose restart model_service
