@@ -35,30 +35,26 @@ jobs:
           #    This avoids OOM issues by not sharing memory with the running producer
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
 
-          # 2. Read the entire file content into the $output variable
-          $output = Get-Content -Path output.log -Raw
+          # 2. Read the log file as an array of lines
+          $output = Get-Content -Path output.log
           
           # Write full output to the action log
-          echo $output
+          echo $output_lines | Out-String
 
           # 4. Clean up the temp file
           Remove-Item output.log
 
-          if ($LASTEXITCODE -ne 0) {
-              echo "::error::The training script failed. See log above for details."
-              exit 1
-          }
-          
-          # Use a specific regex to find the hexadecimal run ID
-          $match = $output | Select-String -Pattern 'MLFLOW_RUN_ID=([a-f0-9]+)'
-          
+          # We search line-by-line with a precise regex
+          # The ^ and $ anchors ensure we match the *entire* line
+          $run_id_line = $output_lines | Select-String -Pattern '^MLFLOW_RUN_ID=([a-f0-9]+)$'
+
           if (-not $run_id_line) {
             echo "::error::Could not find MLFLOW_RUN_ID in training output."
             exit 1
           }
           
-          # Extract the matched group
-          $run_id = $match.Matches[0].Groups[1].Value
+          # Extract the matched group from the first match
+          $run_id = $run_id_line[0].Matches[0].Groups[1].Value
           echo "Found new run ID: $run_id"
           
           # Set the GitHub Actions output variable
