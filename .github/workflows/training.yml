@@ -31,11 +31,17 @@ jobs:
         run: |
           echo "Starting model training..."
             
-          # Capture output to a variable
-          $output = docker exec -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py" 2>&1
+          # 1. Run command, redirect ALL output (stdout & stderr) to a temp file
+          docker exec -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
+
+          # 2. Read the entire file content into the $output variable
+          $output = Get-Content -Path output.log -Raw
           
           # Write full output to the action log
           echo $output
+
+          # 4. Clean up the temp file
+          Remove-Item output.log
           
           # Find the run_id line and extract the ID
           $run_id_line = ($output | Select-String 'MLFLOW_RUN_ID=')
