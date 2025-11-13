@@ -1,0 +1,51 @@
+name: 🚀 Manual Model Training & Promotion
+
+on:
+  # Allows you to run this workflow manually from the Actions tab [cite: 41]
+  workflow_dispatch:
+
+jobs:
+  train-and-promote:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name:  checkout code
+        uses: actions/checkout@v4
+
+      - name: 1. Run the Training Notebook
+        id: training
+        run: |
+          echo "Starting model training..."
+          # We use -T to disable pseudo-TTY, which is required for non-interactive scripts [cite: 50]
+          # We capture the output of the exec command
+          output=$(docker-compose exec -T -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python src/notebooks/01_model_training.py")
+          
+          echo "$output"
+          
+          # This line finds the "MLFLOW_RUN_ID=..." print statement from our notebook
+          run_id=$(echo "$output" | grep 'MLFLOW_RUN_ID=' | cut -d'=' -f2)
+          
+          if [ -z "$run_id" ]; then
+            echo "::error::Could not find MLFLOW_RUN_ID in training output."
+            exit 1
+          fi
+          
+          echo "Found new run ID: $run_id"
+          echo "run_id=$run_id" >> $GITHUB_OUTPUT
+
+      - name: 2. Run the Smart Promotion Script
+        run: |
+          echo "Starting model promotion check..."
+          # Install mlflow client, which is all this script needs
+          pip install mlflow
+          
+          # Pass the run_id and tracking URI to the promotion script
+          NEW_RUN_ID=${{ steps.training.outputs.run_id }} \
+          MLFLOW_TRACKING_URI=http://mlflow_server:5000 \
+          python scripts/promote_model.py
+
+      - name: 3. (Optional) Restart the Model Service
+        if: success()
+        run: |
+          echo "Restarting model_service to load the new champion model..."
+          docker-compose restart model_service
