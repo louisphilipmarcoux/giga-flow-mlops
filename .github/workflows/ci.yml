@@ -1,9 +1,7 @@
 name: 🧪 CI - Run Tests
 
 on:
-  # Run this workflow on all pull requests
   pull_request:
-  # Also allow running it manually
   workflow_dispatch:
 
 jobs:
@@ -11,7 +9,6 @@ jobs:
     runs-on: self-hosted
     
     env:
-      # Use the same .env file as docker-compose
       POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
@@ -22,62 +19,63 @@ jobs:
     steps:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
-    
-      - name: 1.5. Install DVC and Pull Data
+
+      # --- STEP 2: START SERVICES (MOVED UP) ---
+      - name: 2. Start All Services for Testing
+        run: |
+          echo "Building and starting all services in detached mode..."
+          docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci up -d --build
+          echo "Waiting for services to be healthy..."
+          sleep 30
+
+      # --- STEP 3: PULL DATA (MOVED DOWN, RENAMED) ---
+      - name: 3. Install DVC and Pull Data
         shell: pwsh
         env:
-            AWS_USE_SSL: "false"
+          AWS_USE_SSL: "false" # Force disable SSL
         run: |
           echo "Installing DVC..."
           pip install dvc[s3]
+          
           echo "Configuring DVC remote..."
-          # --- MODIFIED: Point DVC to the NEW CI port 9002 ---
           dvc remote modify minio endpointurl http://localhost:9002
           dvc remote modify minio access_key_id $env:MINIO_USER
           dvc remote modify minio secret_access_key $env:MINIO_PASSWORD
+          dvc remote modify minio use_ssl false
+          
           echo "Pulling data from DVC..."
           dvc pull --force
+          
           echo "Data pull complete."
 
-      - name: 2. Start All Services for Testing
-        run: |
-            echo "Building and starting all services in detached mode..."
-            # --- MODIFIED COMMAND ---
-            # Use both docker-compose.yml AND the ci override file
-            docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci up -d --build
-            
-            echo "Waiting for services to be healthy..."
-            sleep 30
-
-      - name: 3. Run a "CI" Model Training
+      # --- STEP 4: RUN TRAINING ---
+      - name: 4. Run a "CI" Model Training
         run: |
           echo "Running a fast 'CI' mode training..."
-          # --- MODIFIED COMMAND: Add the -f docker-compose.ci.yml override ---
           docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci exec -T `
             -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 `
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
             -e AWS_ACCESS_KEY_ID=$env:MINIO_USER `
             -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD `
-            producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py"
-        
+            producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_blog.ipynb && python -u src/notebooks/01_model_blog.py"
+          
           echo "Restarting model_service to load the new model..."
           docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci restart model_service
 
-      - name: 4. Run Pytest Suite
+      # --- STEP 5: RUN TESTS ---
+      - name: 5. Run Pytest Suite
         run: |
           echo "Installing test dependencies..."
-          # MODIFIED: Install all dev dependencies
           pip install -r requirements-dev.txt
           
           echo "Running pytest..."
-          # We tell pytest to talk to the model_service on its mapped port (8000)
-          # We also set the MLFLOW_TRACKING_URI for the promotion logic test
-          pytest tests/ \
-            --model-service-url=http://localhost:8001 \
-            --mlflow-tracking-uri=http://localhost:5001 \
-            --minio-endpoint-url=http://localhost:9001
+          pytest tests/ `
+            --model-service-url=http://localhost:8001 `
+            --mlflow-tracking-uri=http://localhost:5001 `
+            --minio-endpoint-url=http://localhost:9002
         
-      - name: 5. Cleanup Services (Always Runs)
+      # --- STEP 6: CLEANUP ---
+      - name: 6. Cleanup Services (Always Runs)
         if: always()
         run: |
           echo "Cleaning up Docker Compose services..."
