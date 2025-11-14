@@ -34,12 +34,13 @@ jobs:
         run: |
           echo "Starting model training..."
             
-          # Pass all MinIO and MLflow env vars to the training container
+          # Pass all MinIO and MLflow env vars, AND the TRAINING_MODE=FULL flag
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
             -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 `
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
             -e AWS_ACCESS_KEY_ID=$env:AWS_ACCESS_KEY_ID `
             -e AWS_SECRET_ACCESS_KEY=$env:AWS_SECRET_ACCESS_KEY `
+            -e TRAINING_MODE=FULL `
             producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
 
           # 2. Read the log file content
