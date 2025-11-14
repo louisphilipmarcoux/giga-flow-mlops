@@ -1,0 +1,35 @@
+# This override file maps services to *different* host ports
+# for the CI environment, avoiding conflicts with a local stack.
+services:
+  postgres_db:
+    ports:
+      - "5433:5432" # Host: 5433 -> Container: 5432
+
+  mlflow_server:
+    ports:
+      - "5001:5000" # Host: 5001 -> Container: 5000
+
+  model_service:
+    ports:
+      - "8001:8000" # Host: 8001 -> Container: 8000
+
+  dashboard:
+    ports:
+      - "8502:8501" # Host: 8502 -> Container: 8501
+  
+  prometheus:
+    ports:
+      - "9091:9090" # Host: 9091 -> Container: 9090
+
+  grafana:
+    ports:
+      - "3001:3000" # Host: 3001 -> Container: 3000
+      
+  cadvisor:
+    ports:
+      - "8081:8080" # Host: 8081 -> Container: 8080
+
+  minio:
+    ports:
+      - "9002:9000" # Host: 9002 -> Container: 9000
+      - "9003:9001" # Host: 9003 -> Container: 9001

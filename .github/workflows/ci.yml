@@ -24,16 +24,19 @@ jobs:
 
       - name: 2. Start All Services for Testing
         run: |
-          echo "Building and starting all services in detached mode..."
-          docker-compose -f docker-compose.yml -p giga-flow-mlops-ci up -d --build
-          echo "Waiting for services to be healthy..."
-          sleep 30 # Give services time to stabilize (can be replaced with wait-for-it.sh)
+            echo "Building and starting all services in detached mode..."
+            # --- MODIFIED COMMAND ---
+            # Use both docker-compose.yml AND the ci override file
+            docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci up -d --build
+            
+            echo "Waiting for services to be healthy..."
+            sleep 30
 
       - name: 3. Run a "CI" Model Training
         run: |
           echo "Running a fast 'CI' mode training to register a model..."
           # Note: We do NOT set TRAINING_MODE=FULL. We use the "CI" default (10k rows).
-          docker-compose -f docker-compose.yml -p giga-flow-mlops-ci exec -T \
+          docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci exec -T \
             -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 \
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 \
             -e AWS_ACCESS_KEY_ID=$env:MINIO_USER \
@@ -41,7 +44,7 @@ jobs:
             producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py"
 
           echo "Restarting model_service to load the new model..."
-          docker-compose -f docker-compose.yml -p giga-flow-mlops-ci restart model_service
+          docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci restart model_service
 
       - name: 4. Run Pytest Suite
         run: |
@@ -53,12 +56,12 @@ jobs:
           # We tell pytest to talk to the model_service on its mapped port (8000)
           # We also set the MLFLOW_TRACKING_URI for the promotion logic test
           pytest tests/ \
-            --model-service-url=http://localhost:8000 \
-            --mlflow-tracking-uri=http://localhost:5000 \
-            --minio-endpoint-url=http://localhost:9000
+            --model-service-url=http://localhost:8001 \
+            --mlflow-tracking-uri=http://localhost:5001 \
+            --minio-endpoint-url=http://localhost:9001
         
       - name: 5. Cleanup Services (Always Runs)
         if: always()
         run: |
           echo "Cleaning up Docker Compose services..."
-          docker-compose -f docker-compose.yml -p giga-flow-mlops-ci down --volumes --remove-orphans
+          docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci down --volumes --remove-orphans
