@@ -29,11 +29,11 @@ jobs:
           echo "Installing DVC..."
           pip install dvc[s3]
           echo "Configuring DVC remote..."
+          $env:AWS_USE_SSL="false"
           # --- MODIFIED: Point DVC to the NEW CI port 9002 ---
           dvc remote modify minio endpointurl http://localhost:9002
           dvc remote modify minio access_key_id $env:MINIO_USER
           dvc remote modify minio secret_access_key $env:MINIO_PASSWORD
-          dvc remote modify minio use_ssl false
           echo "Pulling data from DVC..."
           dvc pull --force
           echo "Data pull complete."
