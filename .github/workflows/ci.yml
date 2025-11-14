@@ -15,12 +15,28 @@ jobs:
       POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      MLFLOW_DB: ${{ secrets.MLFLOW_DB }}
       MINIO_USER: ${{ secrets.MINIO_USER }}
       MINIO_PASSWORD: ${{ secrets.MINIO_PASSWORD }}
       
     steps:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
+    
+      - name: 1.5. Install DVC and Pull Data
+        shell: pwsh
+        run: |
+          echo "Installing DVC..."
+          pip install dvc[s3]
+          echo "Configuring DVC remote..."
+          # --- MODIFIED: Point DVC to the NEW CI port 9002 ---
+          dvc remote modify minio endpointurl http://localhost:9002
+          dvc remote modify minio access_key_id $env:MINIO_USER
+          dvc remote modify minio secret_access_key $env:MINIO_PASSWORD
+          dvc remote modify minio use_ssl false
+          echo "Pulling data from DVC..."
+          dvc pull --force
+          echo "Data pull complete."
 
       - name: 2. Start All Services for Testing
         run: |
@@ -34,15 +50,15 @@ jobs:
 
       - name: 3. Run a "CI" Model Training
         run: |
-          echo "Running a fast 'CI' mode training to register a model..."
-          # Note: We do NOT set TRAINING_MODE=FULL. We use the "CI" default (10k rows).
-          docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci exec -T \
-            -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 \
-            -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 \
-            -e AWS_ACCESS_KEY_ID=$env:MINIO_USER \
-            -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD \
+          echo "Running a fast 'CI' mode training..."
+          # --- MODIFIED COMMAND: Add the -f docker-compose.ci.yml override ---
+          docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci exec -T `
+            -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 `
+            -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
+            -e AWS_ACCESS_KEY_ID=$env:MINIO_USER `
+            -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD `
             producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py"
-
+        
           echo "Restarting model_service to load the new model..."
           docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci restart model_service
 
