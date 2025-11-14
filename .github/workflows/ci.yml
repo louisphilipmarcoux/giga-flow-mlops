@@ -38,7 +38,7 @@ jobs:
           pip install dvc[s3]
           
           echo "Configuring DVC remote..."
-          dvc remote modify minio endpointurl http://localhost:9002
+          dvc remote modify minio endpointurl http://localhost:9000
           dvc remote modify minio access_key_id $env:MINIO_USER
           dvc remote modify minio secret_access_key $env:MINIO_PASSWORD
           dvc remote modify minio use_ssl false
