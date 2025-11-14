@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 # This script is run *after* the primary POSTGRES_DB is created.
