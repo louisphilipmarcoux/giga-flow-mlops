@@ -12,6 +12,9 @@ jobs:
       POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      MLFLOW_S3_ENDPOINT_URL: "http://localhost:9000"  # Runner accesses via localhost port
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
     
     steps:
       - name:  checkout code
@@ -31,9 +34,13 @@ jobs:
         run: |
           echo "Starting model training..."
             
-          # 1. Use `docker-compose run` to start a NEW, clean container for training
-          #    This avoids OOM issues by not sharing memory with the running producer
-          docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
+          # Pass all MinIO and MLflow env vars to the training container
+          docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
+            -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 `
+            -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
+            -e AWS_ACCESS_KEY_ID=$env:AWS_ACCESS_KEY_ID `
+            -e AWS_SECRET_ACCESS_KEY=$env:AWS_SECRET_ACCESS_KEY `
+            producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
 
           # 2. Read the log file content
           $output_lines = Get-Content -Path output.log
@@ -69,11 +76,13 @@ jobs:
         shell: pwsh
         run: |
           echo "Starting model promotion check..."
-          pip install mlflow
+          # Install drivers for S3 (boto3) and Postgres (psycopg2)
+          pip install mlflow boto3 psycopg2-binary
           
           # Set environment variables for this step
           $env:NEW_RUN_ID = "${{ steps.training.outputs.run_id }}"
           $env:MLFLOW_TRACKING_URI = "http://localhost:5000"
+          # The MinIO vars are already set for the job
           
           # Run the Python script
           python scripts/promote_model.py

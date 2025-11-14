@@ -16,7 +16,6 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 RUN pip install --no-cache-dir --upgrade pip
-# Cache-buster v1
 RUN pip install --no-cache-dir -r requirements.txt
 
 # --- STAGE 2: Build the final 'runtime' image ---

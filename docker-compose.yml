@@ -156,12 +156,13 @@ services:
         condition: service_healthy
       mlflow_server:
         condition: service_healthy
-    volumes:
-      - ./src/notebooks/mlruns:/mlruns
     environment:
       KAFKA_SERVER: "kafka:29092"
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}"
       MLFLOW_TRACKING_URI: "http://mlflow_server:5000"
+      MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
     command: ["/bin/sh", "-c", "uvicorn src.model_service.main:app --host 0.0.0.0 --port 8000"]
 
   producer:
@@ -175,10 +176,12 @@ services:
     depends_on:
       - kafka
     volumes:
-      - ./src/notebooks/mlruns:/mlruns
       - ./data:/data
     environment:
       KAFKA_SERVER: "kafka:29092"
+      MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
     command: ["/bin/sh", "-c", "python -u src/producer/producer.py"]
 
   dashboard:
@@ -211,11 +214,12 @@ services:
         condition: service_healthy
       mlflow_server:
         condition: service_healthy
-    volumes:
-      - ./src/notebooks/mlruns:/mlruns
     environment:
       KAFKA_SERVER: "kafka:29092"
       MLFLOW_TRACKING_URI: "http://mlflow_server:5000"
+      MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
     command: ["/bin/sh", "-c", "python -u src/drift_monitor/monitor.py"]
 
   kafka_exporter:

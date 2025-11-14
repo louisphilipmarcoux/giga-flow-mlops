@@ -17,3 +17,4 @@ aiohttp
 transformers
 torch
 accelerate
+boto3
