@@ -10,7 +10,6 @@ __pycache__/
 
 # Data files
 # Large datasets should not be committed to Git
-data/
 *.csv
 *.zip
 

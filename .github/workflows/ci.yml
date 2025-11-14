@@ -46,7 +46,8 @@ jobs:
       - name: 4. Run Pytest Suite
         run: |
           echo "Installing test dependencies..."
-          pip install pytest httpx pytest-mock
+          # MODIFIED: Install all dev dependencies
+          pip install -r requirements-dev.txt
           
           echo "Running pytest..."
           # We tell pytest to talk to the model_service on its mapped port (8000)

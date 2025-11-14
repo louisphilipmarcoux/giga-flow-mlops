@@ -77,8 +77,8 @@ jobs:
         shell: pwsh
         run: |
           echo "Starting model promotion check..."
-          # Install drivers for S3 (boto3) and Postgres (psycopg2)
-          pip install mlflow boto3 psycopg2-binary
+          # MODIFIED: Install all dev dependencies
+          pip install -r requirements-dev.txt
           
           # Set environment variables for this step
           $env:NEW_RUN_ID = "${{ steps.training.outputs.run_id }}"
