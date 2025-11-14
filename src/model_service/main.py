@@ -3,13 +3,18 @@ import json
 import pandas as pd
 import datetime
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from aiokafka import AIOKafkaConsumer
 import sqlalchemy
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, Integer, String, Float, DateTime
 from starlette_prometheus import PrometheusMiddleware, metrics
+
+# --- NEW Pydantic Model ---
+class PredictionRequest(BaseModel):
+    text: str
 
 # --- Configuration ---
 KAFKA_TOPIC = "giga-flow-messages"
@@ -96,6 +101,38 @@ async def startup_event():
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+# --- NEW PREDICTION ENDPOINT ---
+@app.post("/predict")
+async def predict(request: PredictionRequest):
+    """
+    Performs a live sentiment prediction on a single text input.
+    """
+    global model
+    if not model:
+        # If the model isn't loaded yet, return a 503 Service Unavailable
+        raise HTTPException(status_code=503, detail="Model is not loaded yet. Please wait.")
+    
+    try:
+        # 1. Create a DataFrame for prediction
+        data_df = pd.DataFrame({'text': [request.text]})
+        
+        # 2. Run prediction
+        # Our MLflow wrapper ensures this returns 0 or 1
+        prediction = model.predict(data_df)
+        
+        # 3. Format the output
+        sentiment_score = float(prediction[0])
+        sentiment_label = 'Positive' if sentiment_score == 1.0 else 'Negative'
+        
+        return {
+            "text": request.text,
+            "sentiment_label": sentiment_label,
+            "sentiment_score": sentiment_score
+        }
+    except Exception as e:
+        # Catch any errors during prediction
+        raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}")
 
 # --- Kafka Consumer Logic (UPDATED) ---
 async def consume_messages():
