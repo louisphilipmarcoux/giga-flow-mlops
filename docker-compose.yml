@@ -5,11 +5,13 @@ services:
     container_name: zookeeper
     networks:
       - gigaflow-net
-    healthcheck:  # <-- ADD THIS BLOCK
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/2181 && echo ruok >&3 && grep imok <&3'"]
+    healthcheck:
+      # Use nc (netcat) to check if port 2181 is listening
+      test: ["CMD-SHELL", "nc -z localhost 2181 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s  # Give it time to start
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -83,9 +85,9 @@ services:
       - "5000"
       - --backend-store-uri
       - sqlite:////db/mlflow.db
-      - --registry-store-uri  # <-- The registry flag
+      - --registry-store-uri
       - sqlite:////db/mlflow.db
-      - --artifacts-destination # <-- The modern artifact flag
+      - --artifacts-destination
       - file:///mlruns
       - --serve-artifacts
 
@@ -138,11 +140,10 @@ services:
     ports:
       - "8501:8501"
     environment:
-      # Pass DB credentials to the dashboard
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_HOST: postgres_db # Use the service name
+      POSTGRES_HOST: postgres_db
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -150,7 +151,7 @@ services:
   drift_monitor:
     build:
       context: .
-      dockerfile: Dockerfile  # Re-uses the same Dockerfile as model_service
+      dockerfile: Dockerfile
     container_name: drift_monitor
     networks:
       - gigaflow-net
@@ -164,7 +165,6 @@ services:
     environment:
       KAFKA_SERVER: "kafka:29092"
       MLFLOW_TRACKING_URI: "http://mlflow_server:5000"
-    # This command runs our new script
     command: ["/bin/sh", "-c", "python -u src/drift_monitor/monitor.py"]
 
   kafka_exporter:
@@ -174,7 +174,6 @@ services:
       - gigaflow-net
     ports:
       - "9308:9308"
-    # Connects to the kafka:29092 listener
     command: ["--kafka.server=kafka:29092"]
     depends_on:
       kafka:
@@ -188,7 +187,6 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      # Mount the config file you just made
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
     command: ["--config.file=/etc/prometheus/prometheus.yml"]
@@ -202,7 +200,6 @@ services:
     networks:
       - gigaflow-net
     ports:
-      # Grafana's port 
       - "3000:3000"
     user: "472:0"
     volumes:
