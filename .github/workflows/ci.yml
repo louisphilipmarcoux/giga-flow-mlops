@@ -42,6 +42,7 @@ jobs:
           dvc remote modify minio access_key_id $env:MINIO_USER
           dvc remote modify minio secret_access_key $env:MINIO_PASSWORD
           dvc remote modify minio use_ssl false
+          dvc remote modify minio url s3://mlflow-artifacts/files/md5
           
           echo "Pulling data from DVC..."
           dvc pull --force
