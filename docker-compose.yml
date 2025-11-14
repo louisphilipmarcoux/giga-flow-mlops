@@ -6,7 +6,7 @@ services:
     networks:
       - gigaflow-net
     healthcheck:  # <-- ADD THIS BLOCK
-      test: ["CMD-SHELL", "echo 'ruok' | nc localhost 2181 | grep imok"]
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/2181 && echo ruok >&3 && grep imok <&3'"]
       interval: 10s
       timeout: 5s
       retries: 5
