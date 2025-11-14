@@ -1,7 +1,7 @@
 name: 🚀 Manual Model Training & Promotion
 
 on:
-  # Allows you to run this workflow manually from the Actions tab [cite: 41]
+  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
@@ -17,17 +17,39 @@ jobs:
       MINIO_PASSWORD: ${{ secrets.MINIO_PASSWORD }}
     
     steps:
-      - name:  checkout code
+      - name: 1. Checkout code
         uses: actions/checkout@v4
       
-      - name: 1. DEBUG - List all Docker containers
+      # --- NEW DVC STEP TO PULL DATA FROM MINIO ---
+      - name: 2. DVC Checkout Data
+        id: dvc_pull
+        working-directory: ${{ github.workspace }}
+        shell: pwsh
+        run: |
+          echo "Pulling data using DVC from MinIO..."
+          # The producer container has the volume mount (./data:/data) and DVC dependencies (assuming dvc[s3] is in requirements.txt)
+          # We must install dvc[s3] here as the base container may not have it.
+          docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
+            -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
+            -e AWS_ACCESS_KEY_ID=$env:MINIO_USER `
+            -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD `
+            producer /bin/bash -c "pip install dvc[s3] && dvc pull"
+
+          if ($LASTEXITCODE -ne 0) {
+              echo "::error::DVC pull command failed. The data could not be retrieved from MinIO."
+              exit 1
+          }
+          echo "DVC pull successful. Data is now available in ./data."
+      # ---------------------------------------------
+
+      - name: 3. DEBUG - List all Docker containers
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
           echo "Listing all Docker containers visible to the runner..."
           docker ps -a
 
-      - name: 2. Run the Training Notebook
+      - name: 4. Run the Training Notebook
         id: training
         working-directory: ${{ github.workspace }}
         shell: pwsh
@@ -35,6 +57,7 @@ jobs:
           echo "Starting model training..."
             
           # Pass all MinIO and MLflow env vars, AND the TRAINING_MODE=FULL flag
+          # Note: We must update the step number to 4.
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
             -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 `
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
@@ -72,7 +95,7 @@ jobs:
           # Set the GitHub Actions output variable
           echo "run_id=$run_id" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: 3. Run the Smart Promotion Script
+      - name: 5. Run the Smart Promotion Script
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
@@ -87,7 +110,7 @@ jobs:
           
           # Run the Python script
           python scripts/promote_model.py
-      - name: 4. (Optional) Restart the Model Service
+      - name: 6. (Optional) Restart the Model Service
         if: success()
         working-directory: ${{ github.workspace }}
         shell: pwsh
