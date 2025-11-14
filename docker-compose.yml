@@ -2,7 +2,6 @@ services:
   # --- INFRASTRUCTURE SERVICES ---
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
-    container_name: zookeeper
     networks:
       - gigaflow-net
     healthcheck:
@@ -18,7 +17,6 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.3.0
-    container_name: kafka
     networks:
       - gigaflow-net
     depends_on:
@@ -40,7 +38,6 @@ services:
 
   postgres_db:
     image: postgres:14-alpine
-    container_name: postgres_db
     networks:
       - gigaflow-net
     ports:
@@ -61,7 +58,6 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: minio
     networks:
       - gigaflow-net
     ports:
@@ -81,7 +77,6 @@ services:
 
   create_minio_bucket:
     image: minio/mc:latest
-    container_name: create_minio_bucket
     networks:
       - gigaflow-net
     depends_on:
@@ -100,7 +95,6 @@ services:
     build:
       context: .
       dockerfile: mlflow.Dockerfile
-    container_name: mlflow_server
     networks:
       - gigaflow-net
     ports:
@@ -148,7 +142,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: model_service
     networks:
       - gigaflow-net
     depends_on:
@@ -171,7 +164,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: producer
     restart: on-failure
     networks:
       - gigaflow-net
@@ -190,7 +182,6 @@ services:
     build:
       context: .
       dockerfile: dashboard.Dockerfile
-    container_name: dashboard
     networks:
       - gigaflow-net
     ports:
@@ -208,7 +199,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: drift_monitor
     networks:
       - gigaflow-net
     depends_on:
@@ -226,7 +216,6 @@ services:
 
   kafka_exporter:
     image: danielqsj/kafka-exporter:v1.7.0
-    container_name: kafka_exporter
     networks:
       - gigaflow-net
     ports:
@@ -238,7 +227,6 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.47.2
-    container_name: prometheus
     networks:
       - gigaflow-net
     ports:
@@ -253,7 +241,6 @@ services:
 
   grafana:
     image: grafana/grafana-oss:9.5.3
-    container_name: grafana
     networks:
       - gigaflow-net
     ports:
@@ -266,7 +253,6 @@ services:
       
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.47.2
-    container_name: cadvisor
     networks:
       - gigaflow-net
     ports:
