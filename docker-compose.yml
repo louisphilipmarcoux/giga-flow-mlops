@@ -5,6 +5,11 @@ services:
     container_name: zookeeper
     networks:
       - gigaflow-net
+    healthcheck:  # <-- ADD THIS BLOCK
+      test: ["CMD-SHELL", "cub zookeeper-ready localhost:2181 60"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -15,7 +20,8 @@ services:
     networks:
       - gigaflow-net
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "cub kafka-ready -b localhost:29092 1 60"]
       interval: 10s
