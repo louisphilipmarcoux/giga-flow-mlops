@@ -1,0 +1,61 @@
+name: 🧪 CI - Run Tests
+
+on:
+  # Run this workflow on all pull requests
+  pull_request:
+  # Also allow running it manually
+  workflow_dispatch:
+
+jobs:
+  run-pytest-suite:
+    runs-on: self-hosted
+    
+    env:
+      # Use the same .env file as docker-compose
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      
+    steps:
+      - name: 1. Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 2. Start All Services for Testing
+        run: |
+          echo "Building and starting all services in detached mode..."
+          docker-compose -f docker-compose.yml -p giga-flow-mlops-ci up -d --build
+          echo "Waiting for services to be healthy..."
+          sleep 30 # Give services time to stabilize (can be replaced with wait-for-it.sh)
+
+      - name: 3. Run a "CI" Model Training
+        run: |
+          echo "Running a fast 'CI' mode training to register a model..."
+          # Note: We do NOT set TRAINING_MODE=FULL. We use the "CI" default (10k rows).
+          docker-compose -f docker-compose.yml -p giga-flow-mlops-ci exec -T \
+            -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 \
+            -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 \
+            -e AWS_ACCESS_KEY_ID=minioadmin \
+            -e AWS_SECRET_ACCESS_KEY=minioadmin \
+            producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py"
+
+          echo "Restarting model_service to load the new model..."
+          docker-compose -f docker-compose.yml -p giga-flow-mlops-ci restart model_service
+
+      - name: 4. Run Pytest Suite
+        run: |
+          echo "Installing test dependencies..."
+          pip install pytest httpx pytest-mock
+          
+          echo "Running pytest..."
+          # We tell pytest to talk to the model_service on its mapped port (8000)
+          # We also set the MLFLOW_TRACKING_URI for the promotion logic test
+          pytest tests/ \
+            --model-service-url=http://localhost:8000 \
+            --mlflow-tracking-uri=http://localhost:5000 \
+            --minio-endpoint-url=http://localhost:9000
+        
+      - name: 5. Cleanup Services (Always Runs)
+        if: always()
+        run: |
+          echo "Cleaning up Docker Compose services..."
+          docker-compose -f docker-compose.yml -p giga-flow-mlops-ci down --volumes --remove-orphans
