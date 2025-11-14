@@ -1,23 +1,26 @@
-# requirements.txt
+# --- Core Application ---
+fastapi
+uvicorn[standard]
 pandas
-scikit-learn         # For the simple model [cite: 16, 19]
-fastapi              # For the API [cite: 7]
-uvicorn[standard]    # To run FastAPI
-kafka-python         # For the producer/consumer 
-psycopg2-binary      # If using PostgreSQL 
-ipykernel
-aiokafka
-asyncpg   # Asynchronous driver for PostgreSQL
-sqlalchemy  # For creating a connection pool and defining a table
-mlflow==2.9.2
-nbconvert
+scikit-learn
+sqlalchemy
 starlette-prometheus
-evidently~=0.3.0
 aiohttp
+
+# --- Data & ML ---
+mlflow==2.9.2
 transformers
 torch
 accelerate
+evidently~=0.3.0
+
+# --- Connectors ---
+kafka-python
+aiokafka
+psycopg2-binary
+asyncpg
 boto3
-pytest
-httpx
-pytest-mock
+
+# --- Training (needed in producer container) ---
+nbconvert
+ipykernel

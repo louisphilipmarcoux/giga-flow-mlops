@@ -1,0 +1,7 @@
+# Install all production dependencies
+-r requirements.txt
+
+# --- Testing ---
+pytest
+httpx
+pytest-mock
