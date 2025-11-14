@@ -8,8 +8,10 @@ def set_env_vars(request):
     """Sets environment variables needed for the promotion script test."""
     os.environ["MLFLOW_TRACKING_URI"] = request.config.getoption("--mlflow-tracking-uri")
     os.environ["MLFLOW_S3_ENDPOINT_URL"] = request.config.getoption("--minio-endpoint-url")
-    os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
+    
+    # Read from job-level env vars set by GitHub Actions
+    os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("MINIO_USER")
+    os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("MINIO_PASSWORD")
 
 # Add the 'scripts' directory to the Python path
 # so we can import 'promote_model'

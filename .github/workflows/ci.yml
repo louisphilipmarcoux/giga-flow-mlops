@@ -15,6 +15,8 @@ jobs:
       POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      MINIO_USER: ${{ secrets.MINIO_USER }}
+      MINIO_PASSWORD: ${{ secrets.MINIO_PASSWORD }}
       
     steps:
       - name: 1. Checkout Code
@@ -34,8 +36,8 @@ jobs:
           docker-compose -f docker-compose.yml -p giga-flow-mlops-ci exec -T \
             -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 \
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 \
-            -e AWS_ACCESS_KEY_ID=minioadmin \
-            -e AWS_SECRET_ACCESS_KEY=minioadmin \
+            -e AWS_ACCESS_KEY_ID=$env:MINIO_USER \
+            -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD \
             producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py"
 
           echo "Restarting model_service to load the new model..."

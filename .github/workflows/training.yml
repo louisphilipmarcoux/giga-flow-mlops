@@ -13,8 +13,8 @@ jobs:
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
       MLFLOW_S3_ENDPOINT_URL: "http://localhost:9000"  # Runner accesses via localhost port
-      AWS_ACCESS_KEY_ID: "minioadmin"
-      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      MINIO_USER: ${{ secrets.MINIO_USER }}
+      MINIO_PASSWORD: ${{ secrets.MINIO_PASSWORD }}
     
     steps:
       - name:  checkout code
@@ -38,8 +38,8 @@ jobs:
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
             -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 `
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
-            -e AWS_ACCESS_KEY_ID=$env:AWS_ACCESS_KEY_ID `
-            -e AWS_SECRET_ACCESS_KEY=$env:AWS_SECRET_ACCESS_KEY `
+            -e AWS_ACCESS_KEY_ID=$env:MINIO_USER `
+            -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD `
             -e TRAINING_MODE=FULL `
             producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
 

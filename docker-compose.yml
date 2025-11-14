@@ -48,7 +48,8 @@ services:
     environment:
       POSTGRES_USER: gigaflow
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: sentiment_db
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_MULTIPLE_DATABASES: ${POSTGRES_DB},${MLFLOW_DB}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -68,8 +69,8 @@ services:
     volumes:
       - minio-data:/data
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -87,7 +88,7 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc config host add myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc config host add myminio http://minio:9000 ${MINIO_USER} ${MINIO_PASSWORD};
       /usr/bin/mc mb myminio/mlflow-artifacts --ignore-existing;
       /usr/bin/mc policy set public myminio/mlflow-artifacts;
       exit 0;
@@ -113,8 +114,8 @@ services:
     environment:
       # These tell MLflow how to connect to MinIO
       MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
-      AWS_ACCESS_KEY_ID: "minioadmin"
-      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      AWS_ACCESS_KEY_ID: ${MINIO_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_PASSWORD}
       # Pass in Postgres credentials
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -133,10 +134,10 @@ services:
       - "5000"
       # Use Postgres for the backend store (connects to a new 'mlflow_db' database)
       - --backend-store-uri
-      - postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/mlflow_db
+      - postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${MLFLOW_DB}
       # Use Postgres for the registry store too
       - --registry-store-uri
-      - postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/mlflow_db
+      - postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${MLFLOW_DB}
       # Use our MinIO S3 bucket for artifacts
       - --artifacts-destination
       - s3://mlflow-artifacts/
@@ -161,8 +162,8 @@ services:
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}"
       MLFLOW_TRACKING_URI: "http://mlflow_server:5000"
       MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
-      AWS_ACCESS_KEY_ID: "minioadmin"
-      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      AWS_ACCESS_KEY_ID: ${MINIO_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_PASSWORD}
     command: ["/bin/sh", "-c", "uvicorn src.model_service.main:app --host 0.0.0.0 --port 8000"]
 
   producer:
@@ -180,8 +181,8 @@ services:
     environment:
       KAFKA_SERVER: "kafka:29092"
       MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
-      AWS_ACCESS_KEY_ID: "minioadmin"
-      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      AWS_ACCESS_KEY_ID: ${MINIO_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_PASSWORD}
     command: ["/bin/sh", "-c", "python -u src/producer/producer.py"]
 
   dashboard:
@@ -218,8 +219,8 @@ services:
       KAFKA_SERVER: "kafka:29092"
       MLFLOW_TRACKING_URI: "http://mlflow_server:5000"
       MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
-      AWS_ACCESS_KEY_ID: "minioadmin"
-      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      AWS_ACCESS_KEY_ID: ${MINIO_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_PASSWORD}
     command: ["/bin/sh", "-c", "python -u src/drift_monitor/monitor.py"]
 
   kafka_exporter:
