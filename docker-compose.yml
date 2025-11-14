@@ -17,7 +17,7 @@ services:
     depends_on:
       - zookeeper
     healthcheck:
-      test: ["CMD-SHELL", "cub kafka-ready -b kafka:29092 1 60"]
+      test: ["CMD-SHELL", "cub kafka-ready -b localhost:29092 1 60"]
       interval: 10s
       timeout: 5s
       retries: 5
