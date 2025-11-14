@@ -1,8 +1,7 @@
 [core]
     remote = minio
+    autostage = true
+
 ['remote "minio"']
-    url = s3://mlflow-artifacts
-    endpointurl = http://localhost:9000
-    access_key_id = minioadmin
-    secret_access_key = minioadmin
-    use_ssl = false
+    url = s3://mlflow-artifacts/dvc-data
+    endpointurl = ${DVC_S3_ENDPOINT_URL}

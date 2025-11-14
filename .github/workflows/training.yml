@@ -14,6 +14,7 @@ jobs:
       MLFLOW_S3_ENDPOINT_URL: "http://localhost:9000"
       MINIO_USER: ${{ secrets.MINIO_USER }}
       MINIO_PASSWORD: ${{ secrets.MINIO_PASSWORD }}
+      DVC_S3_ENDPOINT_URL: "http://minio:9000"
     
     steps:
       - name: 1. Checkout code
@@ -31,7 +32,7 @@ jobs:
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
             -v "${PWD}:/workspace" `
             -w /workspace `
-            -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
+            -e DVC_S3_ENDPOINT_URL=http://minio:9000 `
             -e AWS_ACCESS_KEY_ID=$env:MINIO_USER `
             -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD `
             producer /bin/bash -c "pip install dvc[s3] && dvc pull"
