@@ -4,6 +4,7 @@ import os
 import time
 import altair as alt
 from sqlalchemy import create_engine, text
+import requests
 
 # --- Configuration ---
 # Load from environment variables, with defaults for local testing
@@ -39,6 +40,34 @@ st.set_page_config(
 )
 
 st.title("🚀 GigaFlow: Live Sentiment Analysis")
+
+st.header("🔬 Test the Model Live")
+user_text = st.text_input("Enter text to analyze:", "I love this product!")
+
+if st.button("Analyze Sentiment"):
+    if user_text:
+        try:
+            # The 'model_service' is the Docker Compose service name
+            response = requests.post(
+                "http://model_service:8000/predict", 
+                json={"text": user_text},
+                timeout=5  # Set a timeout
+            )
+            
+            if response.status_code == 200:
+                pred = response.json()
+                emoji = "😊" if pred['sentiment_label'] == 'Positive' else "😡"
+                st.subheader(f"Result: {emoji} **{pred['sentiment_label']}** (Score: {pred['sentiment_score']:.4f})")
+            elif response.status_code == 503:
+                st.error("Model service is still loading the model. Please try again in a moment.")
+            else:
+                st.error(f"Error from model service: {response.text}")
+        except requests.exceptions.RequestException as e:
+            st.error(f"Failed to connect to model service: {e}")
+            st.info("The model service might be restarting or loading. Please wait and try again.")
+    else:
+        st.warning("Please enter some text.")
+st.markdown("---")  # Add a visual separator
 
 # Placeholder for the data
 data_placeholder = st.empty()

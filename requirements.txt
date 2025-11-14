@@ -17,5 +17,3 @@ aiohttp
 transformers
 torch
 accelerate
-streamlit
-psycopg2-binary
