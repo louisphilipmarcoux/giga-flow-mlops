@@ -104,8 +104,20 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./src/notebooks/mlruns:/mlruns
       - mlflow-db:/db
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      create_minio_bucket:
+        condition: service_completed_successfully # Wait for bucket to exist
+    environment:
+      # These tell MLflow how to connect to MinIO
+      MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      # Pass in Postgres credentials
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.settimeout(2); result = s.connect_ex((\"localhost\", 5000)); s.close(); exit(0 if result == 0 else 1)'"]
       interval: 10s
@@ -119,12 +131,15 @@ services:
       - 0.0.0.0
       - --port
       - "5000"
+      # Use Postgres for the backend store (connects to a new 'mlflow_db' database)
       - --backend-store-uri
-      - sqlite:////db/mlflow.db
+      - postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/mlflow_db
+      # Use Postgres for the registry store too
       - --registry-store-uri
-      - sqlite:////db/mlflow.db
+      - postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/mlflow_db
+      # Use our MinIO S3 bucket for artifacts
       - --artifacts-destination
-      - file:///mlruns
+      - s3://mlflow-artifacts/
       - --serve-artifacts
 
   model_service:
