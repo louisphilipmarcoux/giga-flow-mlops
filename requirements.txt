@@ -14,3 +14,8 @@ nbconvert
 starlette-prometheus
 evidently~=0.3.0
 aiohttp
+transformers
+torch
+accelerate
+streamlit
+psycopg2-binary
