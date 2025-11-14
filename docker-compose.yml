@@ -140,6 +140,26 @@ services:
     depends_on:
       postgres_db:
         condition: service_healthy
+  
+  drift_monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile  # Re-uses the same Dockerfile as model_service
+    container_name: drift_monitor
+    networks:
+      - gigaflow-net
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mlflow_server:
+        condition: service_healthy
+    volumes:
+      - ./src/notebooks/mlruns:/mlruns
+    environment:
+      KAFKA_SERVER: "kafka:29092"
+      MLFLOW_TRACKING_URI: "http://mlflow_server:5000"
+    # This command runs our new script
+    command: ["/bin/sh", "-c", "python -u src/drift_monitor/monitor.py"]
 
   kafka_exporter:
     image: danielqsj/kafka-exporter:v1.7.0

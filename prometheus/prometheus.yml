@@ -21,3 +21,8 @@ scrape_configs:
     # Scrape cAdvisor for container health metrics 
     static_configs:
       - targets: ['cadvisor:8080']
+  
+  - job_name: 'drift_monitor'
+    # Scrape our new drift monitor service
+    static_configs:
+      - targets: ['drift_monitor:8001']
