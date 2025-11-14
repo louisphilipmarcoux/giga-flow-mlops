@@ -32,10 +32,9 @@ jobs:
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
             -v "${PWD}:/workspace" `
             -w /workspace `
-            -e DVC_S3_ENDPOINT_URL=http://minio:9000 `
             -e AWS_ACCESS_KEY_ID=$env:MINIO_USER `
             -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD `
-            producer /bin/bash -c "pip install dvc[s3] && dvc pull"
+            producer /bin/bash -c "pip install dvc[s3] && dvc remote modify minio endpointurl http://minio:9000 && dvc pull"
 
           if ($LASTEXITCODE -ne 0) {
               echo "::error::DVC pull command failed. The data could not be retrieved from MinIO."
