@@ -1,7 +1,6 @@
 name: 🚀 Manual Model Training & Promotion
 
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
@@ -12,7 +11,7 @@ jobs:
       POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-      MLFLOW_S3_ENDPOINT_URL: "http://localhost:9000"  # Runner accesses via localhost port
+      MLFLOW_S3_ENDPOINT_URL: "http://localhost:9000"
       MINIO_USER: ${{ secrets.MINIO_USER }}
       MINIO_PASSWORD: ${{ secrets.MINIO_PASSWORD }}
     
@@ -20,18 +19,22 @@ jobs:
       - name: 1. Checkout code
         uses: actions/checkout@v4
       
-      # --- NEW DVC STEP TO PULL DATA FROM MINIO ---
+      # --- FIXED DVC STEP ---
       - name: 2. DVC Checkout Data
         id: dvc_pull
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
           echo "Pulling data using DVC from MinIO..."
+          
+          # Mount the current directory into the container so DVC can access .dvc files
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
+            -v "${PWD}:/workspace" `
+            -w /workspace `
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
             -e AWS_ACCESS_KEY_ID=$env:MINIO_USER `
             -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD `
-            producer /bin/bash -c "pip install dvc[s3] && dvc init --no-scm && dvc remote modify minio endpointurl http://minio:9000 && dvc pull"
+            producer /bin/bash -c "pip install dvc[s3] && dvc pull"
 
           if ($LASTEXITCODE -ne 0) {
               echo "::error::DVC pull command failed. The data could not be retrieved from MinIO."
@@ -54,8 +57,6 @@ jobs:
         run: |
           echo "Starting model training..."
             
-          # Pass all MinIO and MLflow env vars, AND the TRAINING_MODE=FULL flag
-          # Note: We must update the step number to 4.
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
             -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 `
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
@@ -64,21 +65,16 @@ jobs:
             -e TRAINING_MODE=FULL `
             producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py" > output.log 2>&1
 
-          # 2. Read the log file content
           $output_lines = Get-Content -Path output.log
           echo $output_lines | Out-String
 
-          #    Check the exit code of the docker-compose command
           if ($LASTEXITCODE -ne 0) {
               echo "::error::The docker-compose command failed. See log above."
               exit 1
           }
 
-          # 4. Clean up the temp file
           Remove-Item output.log
 
-          # We search line-by-line with a precise regex
-          # The ^ and $ anchors ensure we match the *entire* line
           $run_id_line = $output_lines | Select-String -Pattern '^MLFLOW_RUN_ID=([a-f0-9]+)$'
 
           if (-not $run_id_line) {
@@ -86,11 +82,9 @@ jobs:
             exit 1
           }
           
-          # Extract the matched group from the first match
           $run_id = $run_id_line[0].Matches[0].Groups[1].Value
           echo "Found new run ID: $run_id"
           
-          # Set the GitHub Actions output variable
           echo "run_id=$run_id" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: 5. Run the Smart Promotion Script
@@ -98,16 +92,13 @@ jobs:
         shell: pwsh
         run: |
           echo "Starting model promotion check..."
-          # MODIFIED: Install all dev dependencies
           pip install -r requirements-dev.txt
           
-          # Set environment variables for this step
           $env:NEW_RUN_ID = "${{ steps.training.outputs.run_id }}"
           $env:MLFLOW_TRACKING_URI = "http://localhost:5000"
-          # The MinIO vars are already set for the job
           
-          # Run the Python script
           python scripts/promote_model.py
+          
       - name: 6. (Optional) Restart the Model Service
         if: success()
         working-directory: ${{ github.workspace }}
