@@ -30,6 +30,8 @@ PREDICTION_INPUT_LENGTH = Histogram(
 )
 PREDICTIONS_TOTAL = Counter("predictions_total", "Total predictions made", ["sentiment"])
 EMOTIONS_TOTAL = Counter("emotions_total", "Total emotions detected", ["emotion"])
+LANGUAGES_TOTAL = Counter("languages_total", "Languages detected", ["language"])
+TOXIC_TOTAL = Counter("toxic_predictions_total", "Toxic predictions detected")
 
 # --- Pydantic Models ---
 MAX_TEXT_LENGTH = 10_000
@@ -72,6 +74,11 @@ MLFLOW_MODEL_ALIAS = "champion"
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://gigaflow:password@localhost:5432/sentiment_db")
 
+# Auxiliary model names (loaded separately from MLflow sentiment model)
+LANG_MODEL_NAME = os.getenv("LANG_MODEL_NAME", "papluca/xlm-roberta-base-language-detection")
+TOXIC_MODEL_NAME = os.getenv("TOXIC_MODEL_NAME", "unitary/toxic-bert")
+ENABLE_MULTITASK = os.getenv("ENABLE_MULTITASK", "true").lower() == "true"
+
 # --- SQLAlchemy Setup ---
 engine = create_async_engine(DATABASE_URL, echo=False, pool_size=10, max_overflow=20, pool_pre_ping=True)
 Base = declarative_base()
@@ -87,6 +94,9 @@ class SentimentPrediction(Base):
     sentiment_label = Column(String)
     top_emotion = Column(String, nullable=True)
     emotions_json = Column(Text, nullable=True)
+    language = Column(String, nullable=True)
+    toxicity_score = Column(Float, nullable=True)
+    is_toxic = Column(sqlalchemy.Boolean, nullable=True)
     message_timestamp = Column(DateTime)
     processed_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -186,6 +196,57 @@ def parse_prediction(prediction_row):
 model = None
 model_info = {"uri": None, "version": None, "alias": None}
 kafka_consumer_task = None
+lang_pipeline = None
+toxic_pipeline = None
+
+
+def load_auxiliary_models():
+    """Load language detection and toxicity models."""
+    global lang_pipeline, toxic_pipeline
+    if not ENABLE_MULTITASK:
+        logger.info("Multi-task detection disabled.")
+        return
+
+    from transformers import pipeline as hf_pipeline
+
+    try:
+        logger.info(f"Loading language detection model: {LANG_MODEL_NAME}")
+        lang_pipeline = hf_pipeline("text-classification", model=LANG_MODEL_NAME, truncation=True, max_length=512)
+        logger.info("Language detection model loaded.")
+    except Exception as e:
+        logger.warning(f"Failed to load language model: {e}")
+
+    try:
+        logger.info(f"Loading toxicity model: {TOXIC_MODEL_NAME}")
+        toxic_pipeline = hf_pipeline("text-classification", model=TOXIC_MODEL_NAME, truncation=True, max_length=512)
+        logger.info("Toxicity model loaded.")
+    except Exception as e:
+        logger.warning(f"Failed to load toxicity model: {e}")
+
+
+def detect_language(text):
+    """Detect language of text. Returns language code (e.g., 'en', 'fr')."""
+    if lang_pipeline is None:
+        return None
+    try:
+        result = lang_pipeline(text[:512])
+        return result[0]["label"]
+    except Exception:
+        return None
+
+
+def detect_toxicity(text):
+    """Detect toxicity of text. Returns (score, is_toxic)."""
+    if toxic_pipeline is None:
+        return None, None
+    try:
+        result = toxic_pipeline(text[:512])
+        label = result[0]["label"]
+        score = result[0]["score"]
+        is_toxic = label.lower() == "toxic" and score > 0.5
+        return round(score, 4), is_toxic
+    except Exception:
+        return None, None
 
 
 async def create_db_and_tables():
@@ -221,6 +282,8 @@ async def lifespan(app):
                 raise
             logger.info("Retrying in 5 seconds...")
             await asyncio.sleep(5)
+
+    load_auxiliary_models()
 
     logger.info("Starting Kafka consumer...")
     kafka_consumer_task = asyncio.create_task(consume_messages())
@@ -320,12 +383,24 @@ async def predict(request: PredictionRequest):
         if top_emotion:
             EMOTIONS_TOTAL.labels(emotion=top_emotion).inc()
 
+        # Multi-task: language + toxicity
+        language = detect_language(request.text)
+        toxicity_score, is_toxic = detect_toxicity(request.text)
+
+        if language:
+            LANGUAGES_TOTAL.labels(language=language).inc()
+        if is_toxic:
+            TOXIC_TOTAL.inc()
+
         return {
             "text": request.text,
             "sentiment_label": sentiment_label,
             "sentiment_score": result.get("sentiment_score", 0),
             "top_emotion": top_emotion,
             "emotions": result.get("emotions", {}),
+            "language": language,
+            "toxicity_score": toxicity_score,
+            "is_toxic": is_toxic,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}") from e
@@ -427,7 +502,15 @@ async def consume_messages():
             if top_emotion:
                 EMOTIONS_TOTAL.labels(emotion=top_emotion).inc()
 
-            logger.info(f"'{kafka_msg.text}' -> {sentiment_label} | {top_emotion}")
+            # Multi-task detection
+            language = detect_language(kafka_msg.text)
+            toxicity_score, is_toxic = detect_toxicity(kafka_msg.text)
+            if language:
+                LANGUAGES_TOTAL.labels(language=language).inc()
+            if is_toxic:
+                TOXIC_TOTAL.inc()
+
+            logger.info(f"'{kafka_msg.text[:60]}' -> {sentiment_label} | {top_emotion} | {language}")
 
             async with AsyncSessionLocal() as session, session.begin():
                 session.add(
@@ -437,6 +520,9 @@ async def consume_messages():
                         sentiment_label=sentiment_label,
                         top_emotion=top_emotion,
                         emotions_json=json.dumps(emotions) if emotions else None,
+                        language=language,
+                        toxicity_score=toxicity_score,
+                        is_toxic=is_toxic,
                         message_timestamp=datetime.datetime.utcfromtimestamp(kafka_msg.timestamp),
                     )
                 )

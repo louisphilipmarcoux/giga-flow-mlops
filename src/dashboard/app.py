@@ -19,7 +19,7 @@ MODEL_SERVICE = "http://model_service:8000"
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 QUERY_RECENT = text(
-    "SELECT processed_at, text, sentiment_label, sentiment_score, top_emotion"
+    "SELECT processed_at, text, sentiment_label, sentiment_score, top_emotion, language, is_toxic"
     " FROM sentiment_predictions"
     " ORDER BY processed_at DESC"
     " LIMIT 200"
@@ -34,6 +34,15 @@ QUERY_SENTIMENT_OVER_TIME = text(
     " GROUP BY minute, sentiment_label"
     " ORDER BY minute DESC"
     " LIMIT 300"
+)
+
+QUERY_LANGUAGE_COUNTS = text(
+    "SELECT language, COUNT(*) as count"
+    " FROM sentiment_predictions"
+    " WHERE language IS NOT NULL"
+    " GROUP BY language"
+    " ORDER BY count DESC"
+    " LIMIT 10"
 )
 
 QUERY_EMOTION_COUNTS = text(
@@ -125,6 +134,16 @@ def load_sentiment_over_time():
     try:
         with engine.connect() as conn:
             return pd.read_sql(QUERY_SENTIMENT_OVER_TIME, conn)
+    except Exception:
+        return pd.DataFrame()
+
+
+def load_language_counts():
+    if engine is None:
+        return pd.DataFrame()
+    try:
+        with engine.connect() as conn:
+            return pd.read_sql(QUERY_LANGUAGE_COUNTS, conn)
     except Exception:
         return pd.DataFrame()
 
@@ -246,6 +265,14 @@ with tab_predict:
                     top_emotion = pred.get("top_emotion", "")
                     if top_emotion:
                         st.metric("Top Emotion", top_emotion)
+                    lang = pred.get("language")
+                    if lang:
+                        st.metric("Language", lang)
+                    is_toxic = pred.get("is_toxic")
+                    if is_toxic:
+                        st.error("⚠️ Toxic content detected!")
+                    elif is_toxic is not None:
+                        st.success("✅ Non-toxic")
 
                 with col_emotions:
                     emotions = pred.get("emotions", {})
@@ -495,10 +522,45 @@ while True:
                 else:
                     st.info("No emotion data yet.")
 
-            # --- Row 2: Sentiment Over Time + Prediction History ---
+            # --- Row 2: Language Distribution + Sentiment Over Time ---
             col3, col4 = st.columns(2)
 
             with col3:
+                st.subheader("Language Distribution")
+                lang_df = load_language_counts()
+                if not lang_df.empty:
+                    chart = (
+                        alt.Chart(lang_df)
+                        .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
+                        .encode(
+                            x=alt.X("count:Q", title="Count"),
+                            y=alt.Y("language:N", sort="-x", title=""),
+                            color=alt.Color("count:Q", scale=alt.Scale(scheme="blues"), legend=None),
+                        )
+                        .properties(height=250)
+                    )
+                    st.altair_chart(chart, use_container_width=True)
+                else:
+                    st.info("No language data yet.")
+
+            with col4:
+                # Toxicity stats
+                st.subheader("Content Safety")
+                if "is_toxic" in df.columns:
+                    toxic_count = df["is_toxic"].sum() if df["is_toxic"].notna().any() else 0
+                    safe_count = len(df) - toxic_count
+                    col_safe, col_toxic = st.columns(2)
+                    with col_safe:
+                        st.metric("Safe", f"{safe_count}")
+                    with col_toxic:
+                        st.metric("Toxic", f"{int(toxic_count)}", delta_color="inverse")
+                else:
+                    st.info("Toxicity detection not available.")
+
+            # --- Row 3: Sentiment Over Time + Prediction History ---
+            col5, col6 = st.columns(2)
+
+            with col5:
                 st.subheader("Sentiment Over Time")
                 time_df = load_sentiment_over_time()
                 if not time_df.empty:
@@ -516,11 +578,13 @@ while True:
                 else:
                     st.info("Not enough data for time series.")
 
-            with col4:
+            with col6:
                 st.subheader("Recent Predictions")
                 display_cols = ["processed_at", "text", "sentiment_label"]
                 if "top_emotion" in df.columns:
                     display_cols.append("top_emotion")
+                if "language" in df.columns:
+                    display_cols.append("language")
                 st.dataframe(df[display_cols].head(50), use_container_width=True, height=300)
 
     time.sleep(5)
