@@ -4,4 +4,4 @@
 # Training extras
 scikit-learn==1.8.0
 nbconvert==7.17.0
-ipykernel==6.29.5
+ipykernel==7.2.0
