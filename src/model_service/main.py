@@ -83,12 +83,31 @@ class SentimentPrediction(Base):
 
 # --- Emotion-to-Sentiment Mapping ---
 POSITIVE_EMOTIONS = {
-    "admiration", "amusement", "approval", "caring", "desire",
-    "excitement", "gratitude", "joy", "love", "optimism", "pride", "relief",
+    "admiration",
+    "amusement",
+    "approval",
+    "caring",
+    "desire",
+    "excitement",
+    "gratitude",
+    "joy",
+    "love",
+    "optimism",
+    "pride",
+    "relief",
 }
 NEGATIVE_EMOTIONS = {
-    "anger", "annoyance", "disappointment", "disapproval", "disgust",
-    "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness",
+    "anger",
+    "annoyance",
+    "disappointment",
+    "disapproval",
+    "disgust",
+    "embarrassment",
+    "fear",
+    "grief",
+    "nervousness",
+    "remorse",
+    "sadness",
 }
 NEUTRAL_EMOTIONS = {"neutral", "realization", "confusion", "curiosity"}
 

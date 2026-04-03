@@ -224,7 +224,9 @@ with tab_predict:
 
     with col_input:
         default_text = st.session_state.get("analyze_text", "")
-        user_text = st.text_area("Enter text to analyze:", value=default_text, height=100, placeholder="Type anything in any language...")
+        user_text = st.text_area(
+            "Enter text to analyze:", value=default_text, height=100, placeholder="Type anything in any language..."
+        )
         if user_text != default_text:
             st.session_state["analyze_text"] = user_text
 
@@ -305,15 +307,17 @@ with tab_models:
             params = run_data["params"]
             is_champion = str(v.get("version")) == str(champion_version)
 
-            rows.append({
-                "Version": v.get("version"),
-                "Status": "👑 Champion" if is_champion else "",
-                "Accuracy": f"{metrics.get('accuracy', 0):.4f}" if metrics.get("accuracy") else "N/A",
-                "F1-Score": f"{metrics.get('f1_score', 0):.4f}" if metrics.get("f1_score") else "N/A",
-                "Model": params.get("model_name") or params.get("sentiment_model", "N/A"),
-                "Dataset Size": params.get("dataset_size", "-"),
-                "Run ID": v.get("run_id", "")[:12],
-            })
+            rows.append(
+                {
+                    "Version": v.get("version"),
+                    "Status": "👑 Champion" if is_champion else "",
+                    "Accuracy": f"{metrics.get('accuracy', 0):.4f}" if metrics.get("accuracy") else "N/A",
+                    "F1-Score": f"{metrics.get('f1_score', 0):.4f}" if metrics.get("f1_score") else "N/A",
+                    "Model": params.get("model_name") or params.get("sentiment_model", "N/A"),
+                    "Dataset Size": params.get("dataset_size", "-"),
+                    "Run ID": v.get("run_id", "")[:12],
+                }
+            )
 
         df_models = pd.DataFrame(rows)
         st.dataframe(df_models, use_container_width=True, hide_index=True)
