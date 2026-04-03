@@ -185,6 +185,39 @@ with tab_models:
         st.dataframe(df_models, use_container_width=True, hide_index=True)
 
         st.markdown(f"**Current Champion:** Version {champion_version}" if champion_version else "**No champion set**")
+
+        st.subheader("🔄 Load a Model Version")
+        version_numbers = sorted([v.get("version") for v in versions], reverse=True)
+        col_select, col_load, col_champion = st.columns([2, 1, 1])
+        with col_select:
+            selected_version = st.selectbox("Select version to load:", version_numbers)
+        with col_load:
+            st.write("")  # spacing
+            if st.button("Load Version"):
+                try:
+                    resp = requests.post(
+                        "http://model_service:8000/reload",
+                        json={"version": int(selected_version)},
+                        timeout=30,
+                    )
+                    if resp.status_code == 200:
+                        st.success(f"Version {selected_version} loaded!")
+                    else:
+                        st.error(f"Failed: {resp.text}")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Could not reach model service: {e}")
+        with col_champion:
+            st.write("")  # spacing
+            if st.button("Load Champion"):
+                try:
+                    resp = requests.post("http://model_service:8000/reload", timeout=30)
+                    if resp.status_code == 200:
+                        st.success("Champion model loaded!")
+                    else:
+                        st.error(f"Failed: {resp.text}")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Could not reach model service: {e}")
+
         st.markdown(f"📈 [View in MLflow UI]({MLFLOW_URI.replace('mlflow_server', 'localhost')})")
 
 # --- Main Loop (updates dashboard tab) ---

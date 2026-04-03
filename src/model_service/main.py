@@ -165,15 +165,22 @@ async def health_check():
 
 
 # --- Model Reload Endpoint ---
+class ReloadRequest(BaseModel):
+    version: int | None = None  # If None, loads champion
+
+
 @app.post("/reload")
-async def reload_model():
-    """Hot-swap the model by reloading the current champion from MLflow."""
+async def reload_model(request: ReloadRequest = ReloadRequest()):
+    """Hot-swap the model. Optionally specify a version number."""
     global model
-    model_uri = f"models:/{MLFLOW_MODEL_NAME}@{MLFLOW_MODEL_ALIAS}"
+    if request.version:
+        model_uri = f"models:/{MLFLOW_MODEL_NAME}/{request.version}"
+    else:
+        model_uri = f"models:/{MLFLOW_MODEL_NAME}@{MLFLOW_MODEL_ALIAS}"
     try:
         model = mlflow.pyfunc.load_model(model_uri)
         logger.info(f"Model reloaded: {model_uri}")
-        return {"status": "reloaded", "model": MLFLOW_MODEL_NAME, "alias": MLFLOW_MODEL_ALIAS}
+        return {"status": "reloaded", "uri": model_uri}
     except Exception as e:
         logger.error(f"Failed to reload model: {e}")
         raise HTTPException(status_code=500, detail=f"Reload failed: {e}") from e
