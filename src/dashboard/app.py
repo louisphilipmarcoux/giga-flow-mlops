@@ -194,29 +194,31 @@ with tab_models:
         with col_load:
             st.write("")  # spacing
             if st.button("Load Version"):
-                try:
-                    resp = requests.post(
-                        "http://model_service:8000/reload",
-                        json={"version": int(selected_version)},
-                        timeout=30,
-                    )
-                    if resp.status_code == 200:
-                        st.success(f"Version {selected_version} loaded!")
-                    else:
-                        st.error(f"Failed: {resp.text}")
-                except requests.exceptions.RequestException as e:
-                    st.error(f"Could not reach model service: {e}")
+                with st.spinner(f"Loading version {selected_version}... (large models may take ~60s)"):
+                    try:
+                        resp = requests.post(
+                            "http://model_service:8000/reload",
+                            json={"version": int(selected_version)},
+                            timeout=120,
+                        )
+                        if resp.status_code == 200:
+                            st.success(f"Version {selected_version} loaded!")
+                        else:
+                            st.error(f"Failed: {resp.text}")
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Could not reach model service: {e}")
         with col_champion:
             st.write("")  # spacing
             if st.button("Load Champion"):
-                try:
-                    resp = requests.post("http://model_service:8000/reload", timeout=30)
-                    if resp.status_code == 200:
-                        st.success("Champion model loaded!")
-                    else:
-                        st.error(f"Failed: {resp.text}")
-                except requests.exceptions.RequestException as e:
-                    st.error(f"Could not reach model service: {e}")
+                with st.spinner("Loading champion model... (large models may take ~60s)"):
+                    try:
+                        resp = requests.post("http://model_service:8000/reload", timeout=120)
+                        if resp.status_code == 200:
+                            st.success("Champion model loaded!")
+                        else:
+                            st.error(f"Failed: {resp.text}")
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Could not reach model service: {e}")
 
         st.markdown(f"📈 [View in MLflow UI]({MLFLOW_URI.replace('mlflow_server', 'localhost')})")
 
