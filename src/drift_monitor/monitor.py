@@ -7,8 +7,8 @@ import mlflow
 import pandas as pd
 from aiohttp import web
 from aiokafka import AIOKafkaConsumer
-from evidently.metrics import ColumnDriftMetric
-from evidently.report import Report
+from evidently import Report
+from evidently.metrics import ValueDrift
 from prometheus_client import REGISTRY, Gauge
 
 logger = logging.getLogger("drift_monitor")
@@ -81,17 +81,16 @@ async def run_drift_check(live_batch_df):
 
     logger.info(f"Running drift check on {len(live_batch_df)} new records...")
     try:
-        data_drift_report = Report(metrics=[ColumnDriftMetric(column_name="text")])
-        data_drift_report.run(current_data=live_batch_df, reference_data=reference_data, column_mapping=None)
+        report = Report(metrics=[ValueDrift(column="text")])
+        snapshot = report.run(reference_data=reference_data, current_data=live_batch_df)
 
-        report_dict = data_drift_report.as_dict()
-
-        drift_info = report_dict["metrics"][0]["result"]
-        p_value = drift_info.get("drift_score", 0.0)
-        drift_detected = drift_info.get("drift_detected", False)
+        # Extract drift result from metric_results
+        result = list(snapshot.metric_results.values())[0]
+        drift_score = float(result.value)
+        drift_detected = drift_score < 0.05  # p-value below threshold means drift
         score = 1.0 if drift_detected else 0.0
 
-        logger.info(f"Drift Check Complete: p-value={p_value:.4f}, Drift Detected={drift_detected}")
+        logger.info(f"Drift Check Complete: drift_score={drift_score:.4f}, Drift Detected={drift_detected}")
 
         DRIFT_SCORE.set(score)
         DRIFT_P_VALUE.set(p_value)
