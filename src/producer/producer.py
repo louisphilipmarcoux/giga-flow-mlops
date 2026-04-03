@@ -11,21 +11,34 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 
 # Dummy data to simulate a live feed
 dummy_data = [
+    # Positive
     "I love this product, it's amazing!",
-    "This is the worst service I have ever received.",
     "The new update is fantastic.",
-    "I'm so frustrated with this app.",
     "What a wonderful experience!",
-    "It's okay, but I expected more.",
     "Absolutely brilliant, exceeded my expectations!",
-    "Terrible quality, would not recommend to anyone.",
     "The customer support was very helpful and responsive.",
-    "I regret buying this, total waste of money.",
     "Great value for the price, very satisfied.",
-    "The interface is confusing and hard to navigate.",
     "Best purchase I've made this year!",
-    "Disappointing performance, expected much better.",
     "Smooth and seamless experience from start to finish.",
+    # Negative
+    "This is the worst service I have ever received.",
+    "I'm so frustrated with this app.",
+    "Terrible quality, would not recommend to anyone.",
+    "I regret buying this, total waste of money.",
+    "The interface is confusing and hard to navigate.",
+    "Disappointing performance, expected much better.",
+    # Neutral
+    "It's okay, but I expected more.",
+    "The product arrived on time and works as described.",
+    "I have no strong feelings about this one way or another.",
+    "It does what it says, nothing more nothing less.",
+    # Curious / Confused
+    "I wonder how this compares to the competition?",
+    "Can someone explain how this feature works?",
+    "I'm not sure what to think about the new design.",
+    # Surprise
+    "I can't believe how fast the shipping was!",
+    "Wow, I did not expect this level of quality!",
 ]
 
 # Kafka topic to send messages to
