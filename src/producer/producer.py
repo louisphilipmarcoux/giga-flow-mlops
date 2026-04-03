@@ -142,55 +142,41 @@ try:
 
     fake = Faker(["en_US", "fr_FR", "es_ES", "de_DE", "it_IT", "pt_BR", "nl_NL"])
 
-    review_templates = [
-        # Positive templates
-        "I absolutely love {product}! {reason}.",
-        "The {product} is amazing, {reason}!",
-        "{product} exceeded all my expectations. {reason}.",
-        "Best {product} I've ever had! {reason}.",
-        "So happy with {product}, {reason}!",
-        # Negative templates
-        "I hate {product}, {reason}.",
-        "The {product} is terrible, {reason}.",
-        "Very disappointed with {product}. {reason}.",
-        "Worst {product} ever, {reason}.",
-        "{product} is a complete waste, {reason}.",
-        # Neutral templates
-        "The {product} is okay, {reason}.",
-        "{product} works as expected, {reason}.",
-        "Nothing special about {product}, {reason}.",
-    ]
-
-    products = [
-        "this product", "the app", "the service", "this restaurant",
-        "the new update", "customer support", "the delivery", "this tool",
-        "the subscription", "this device", "the software", "this course",
-    ]
-
-    positive_reasons = [
-        "it really changed my daily routine",
-        "the quality is outstanding",
-        "everything works perfectly",
-        "the team behind it is incredible",
-        "I can't recommend it enough",
-        "it saved me so much time",
-    ]
-
-    negative_reasons = [
-        "it broke after two days",
-        "the quality is terrible",
-        "nothing works as advertised",
-        "I wasted my money",
-        "support never responded",
-        "it's completely unusable",
-    ]
-
-    neutral_reasons = [
-        "it does what it claims",
-        "nothing stands out",
-        "I expected more for the price",
-        "it's average at best",
-        "no complaints but no excitement either",
+    generated_sentences = [
+        # Positive
+        "Just tried the new software update and I'm really impressed with the improvements!",
+        "The team did an incredible job on this release, everything feels so smooth now.",
+        "I switched to this service last month and it has been a wonderful experience so far.",
+        "The build quality on this device is seriously impressive for the price.",
+        "Customer support resolved my issue within minutes, that's how it should be done!",
+        "My whole family loves this product, we use it every single day.",
+        "This is exactly what I was looking for, couldn't be happier with my purchase.",
+        "The delivery was super fast and the packaging was really well done.",
+        "After trying many alternatives, this is by far the best option available.",
+        "The new features they added last week are a total game changer.",
+        # Negative
+        "I've been waiting three weeks for my order and still no update from support.",
+        "The app crashes every time I try to open the settings page, so frustrating.",
+        "Paid premium price for what feels like a budget product, very misleading.",
+        "The new update completely ruined the user interface, bring back the old version.",
+        "Tried to get a refund but the process is deliberately complicated.",
+        "Battery life is terrible, barely lasts four hours with normal use.",
+        "The instructions are impossible to follow, clearly not tested with real users.",
+        "Sound quality is way below what was advertised, total letdown.",
+        "Had to return the product twice because of manufacturing defects.",
+        "The subscription auto-renewed without any warning email, that's shady.",
+        # Neutral
+        "The product arrived and it looks exactly like the photos on the website.",
+        "Been using it for a week now, it works fine but nothing groundbreaking.",
+        "Decent enough for everyday use, wouldn't call it premium though.",
+        "The packaging was standard, product was as described in the listing.",
+        "It's a solid option if you don't want to spend too much.",
+        # Curious / Questioning
+        "Has anyone tried using this with a Bluetooth connection?",
+        "I'm wondering if they plan to add dark mode in the next update.",
+        "Does the warranty cover accidental damage or just defects?",
+        "How long does the setup process usually take for new users?",
+        "Anyone know if this is compatible with the latest operating system?",
     ]
 
     HAS_FAKER = True
@@ -201,21 +187,10 @@ except ImportError:
 
 
 def generate_message():
-    """Generate a message — mix of hardcoded and dynamically generated text."""
-    # 60% hardcoded (diverse multilingual), 40% generated (infinite variety)
-    if HAS_FAKER and random.random() < 0.4:
-        template = random.choice(review_templates)
-        product = random.choice(products)
-        if "love" in template or "amazing" in template or "happy" in template or "Best" in template:
-            reason = random.choice(positive_reasons)
-        elif "hate" in template or "terrible" in template or "disappointed" in template or "Worst" in template:
-            reason = random.choice(negative_reasons)
-        else:
-            reason = random.choice(neutral_reasons)
-        text = template.format(product=product, reason=reason)
-    else:
-        text = random.choice(dummy_data)
-    return text
+    """Generate a message — mix of hardcoded multilingual and pre-written generated sentences."""
+    if HAS_FAKER and random.random() < 0.3:
+        return random.choice(generated_sentences)
+    return random.choice(dummy_data)
 
 
 def init_producer():

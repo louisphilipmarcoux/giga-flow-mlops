@@ -449,21 +449,9 @@ while True:
 
             with col4:
                 st.subheader("Recent Predictions")
-                search = st.text_input("🔍 Filter by text or emotion:", key="search_predictions")
                 display_cols = ["processed_at", "text", "sentiment_label"]
                 if "top_emotion" in df.columns:
                     display_cols.append("top_emotion")
-
-                filtered_df = df
-                if search:
-                    mask = (
-                        df["text"].str.contains(search, case=False, na=False)
-                        | df["sentiment_label"].str.contains(search, case=False, na=False)
-                    )
-                    if "top_emotion" in df.columns:
-                        mask = mask | df["top_emotion"].str.contains(search, case=False, na=False)
-                    filtered_df = df[mask]
-
-                st.dataframe(filtered_df[display_cols], use_container_width=True, height=300)
+                st.dataframe(df[display_cols].head(50), use_container_width=True, height=300)
 
     time.sleep(5)
