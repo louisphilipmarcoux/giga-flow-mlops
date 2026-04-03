@@ -146,16 +146,20 @@
       ]
     },
     {
-      "title": "Requests in Progress",
+      "title": "Predictions / min",
       "type": "stat",
       "gridPos": { "h": 8, "w": 6, "x": 12, "y": 16 },
       "datasource": null,
       "targets": [
         {
-          "expr": "starlette_requests_in_progress",
-          "legendFormat": "In Progress"
+          "expr": "sum(rate(predictions_total[5m])) * 60",
+          "legendFormat": "pred/min"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 1 },
+        "overrides": []
+      }
     },
     {
       "title": "Prediction Input Length (avg)",
