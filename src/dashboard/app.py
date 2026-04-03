@@ -18,7 +18,7 @@ MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5000")
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 QUERY_RECENT = text(
-    "SELECT processed_at, text, sentiment_label, sentiment_score"
+    "SELECT processed_at, text, sentiment_label, sentiment_score, top_emotion"
     " FROM sentiment_predictions"
     " ORDER BY processed_at DESC"
     " LIMIT 100"
@@ -135,12 +135,39 @@ with tab_predict:
                 response = requests.post(
                     "http://model_service:8000/predict",
                     json={"text": user_text},
-                    timeout=10,
+                    timeout=30,
                 )
                 if response.status_code == 200:
                     pred = response.json()
-                    emoji = "😊" if pred["sentiment_label"] == "Positive" else "😡"
-                    st.subheader(f"Result: {emoji} **{pred['sentiment_label']}** (Score: {pred['sentiment_score']:.4f})")
+                    sentiment = pred["sentiment_label"]
+                    emoji_map = {"Positive": "😊", "Negative": "😡", "Neutral": "😐"}
+                    emoji = emoji_map.get(sentiment, "🤔")
+
+                    st.subheader(f"Result: {emoji} **{sentiment}**")
+
+                    top_emotion = pred.get("top_emotion", "")
+                    emotions = pred.get("emotions", {})
+
+                    if top_emotion and emotions:
+                        st.markdown(f"**Top emotion:** {top_emotion}")
+                        emotion_df = pd.DataFrame(
+                            [{"Emotion": k, "Score": v} for k, v in emotions.items()]
+                        ).sort_values("Score", ascending=False)
+
+                        chart = (
+                            alt.Chart(emotion_df)
+                            .mark_bar()
+                            .encode(
+                                x=alt.X("Score:Q", scale=alt.Scale(domain=[0, 1])),
+                                y=alt.Y("Emotion:N", sort="-x"),
+                                color=alt.value("#4CAF50"),
+                            )
+                            .properties(height=200)
+                        )
+                        st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.metric("Score", f"{pred.get('sentiment_score', 0):.4f}")
+
                 elif response.status_code == 503:
                     st.error("Model service is still loading. Please try again.")
                 else:
@@ -243,9 +270,10 @@ while True:
             st.info("No data received yet. Waiting for predictions...")
         else:
             latest = df.iloc[0]
-            sentiment_emoji = "😊" if latest["sentiment_label"] == "Positive" else "😡"
+            emoji_map = {"Positive": "😊", "Negative": "😡", "Neutral": "😐"}
+            sentiment_emoji = emoji_map.get(latest["sentiment_label"], "🤔")
 
-            col_metric1, col_metric2, col_metric3 = st.columns(3)
+            col_metric1, col_metric2, col_metric3, col_metric4 = st.columns(4)
             with col_metric1:
                 st.metric("Total Predictions", f"{total_count:,}")
             with col_metric2:
@@ -253,13 +281,19 @@ while True:
                 st.metric("Positive %", f"{pos_pct:.1f}%")
             with col_metric3:
                 st.metric("Latest", f"{sentiment_emoji} {latest['sentiment_label']}")
+            with col_metric4:
+                top_em = latest.get("top_emotion", "") if "top_emotion" in df.columns else ""
+                st.metric("Top Emotion", top_em or "-")
 
             st.markdown(f'> *"{latest["text"]}"*')
 
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("Recent Predictions")
-                st.dataframe(df[["processed_at", "text", "sentiment_label"]], use_container_width=True, height=400)
+                display_cols = ["processed_at", "text", "sentiment_label"]
+                if "top_emotion" in df.columns:
+                    display_cols.append("top_emotion")
+                st.dataframe(df[display_cols], use_container_width=True, height=400)
             with col2:
                 st.subheader("Sentiment Distribution")
                 sentiment_counts = df["sentiment_label"].value_counts().reset_index()

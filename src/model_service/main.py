@@ -13,7 +13,7 @@ from aiokafka import AIOKafkaConsumer
 from fastapi import FastAPI, HTTPException
 from prometheus_client import Counter, Histogram
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from starlette_prometheus import PrometheusMiddleware, metrics
@@ -29,6 +29,7 @@ PREDICTION_INPUT_LENGTH = Histogram(
     buckets=[10, 50, 100, 200, 500, 1000, 2000, 5000],
 )
 PREDICTIONS_TOTAL = Counter("predictions_total", "Total predictions made", ["sentiment"])
+EMOTIONS_TOTAL = Counter("emotions_total", "Total emotions detected", ["emotion"])
 
 # --- Pydantic Models ---
 MAX_TEXT_LENGTH = 10_000
@@ -59,7 +60,6 @@ KAFKA_SERVER = os.getenv("KAFKA_SERVER", "localhost:9092")
 MLFLOW_MODEL_NAME = "giga-flow-sentiment"
 MLFLOW_MODEL_ALIAS = "champion"
 
-# Load from environment variable, with our local DB as a fallback
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://gigaflow:password@localhost:5432/sentiment_db")
 
 # --- SQLAlchemy Setup ---
@@ -75,8 +75,54 @@ class SentimentPrediction(Base):
     text = Column(String, index=True)
     sentiment_score = Column(Float)
     sentiment_label = Column(String)
+    top_emotion = Column(String, nullable=True)
+    emotions_json = Column(Text, nullable=True)
     message_timestamp = Column(DateTime)
     processed_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+# --- Emotion-to-Sentiment Mapping ---
+POSITIVE_EMOTIONS = {
+    "admiration", "amusement", "approval", "caring", "desire",
+    "excitement", "gratitude", "joy", "love", "optimism", "pride", "relief",
+}
+NEGATIVE_EMOTIONS = {
+    "anger", "annoyance", "disappointment", "disapproval", "disgust",
+    "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness",
+}
+NEUTRAL_EMOTIONS = {"neutral", "realization", "surprise", "confusion", "curiosity"}
+
+
+def emotions_to_sentiment(top_emotion):
+    """Derive sentiment from the top detected emotion."""
+    if top_emotion in POSITIVE_EMOTIONS:
+        return "Positive"
+    if top_emotion in NEGATIVE_EMOTIONS:
+        return "Negative"
+    return "Neutral"
+
+
+def parse_prediction(prediction_row):
+    """Parse a single prediction row from the model output.
+    Handles both old binary format (0/1) and new emotion format (JSON string)."""
+    val = prediction_row
+    if isinstance(val, str):
+        try:
+            data = json.loads(val)
+            if isinstance(data, dict):
+                return data
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Old binary model fallback
+    score = float(val)
+    sentiment = "Positive" if score == 1.0 else "Negative"
+    return {
+        "sentiment_label": sentiment,
+        "sentiment_score": score,
+        "top_emotion": sentiment.lower(),
+        "emotions": {},
+    }
 
 
 # --- Model & Consumer Globals ---
@@ -124,7 +170,6 @@ async def lifespan(app):
 
     yield
 
-    # Shutdown: cancel Kafka consumer
     if kafka_consumer_task:
         kafka_consumer_task.cancel()
         try:
@@ -140,7 +185,6 @@ app.add_middleware(PrometheusMiddleware)
 app.add_route("/metrics", metrics)
 
 
-# --- Health Check Endpoint ---
 @app.get("/health")
 async def health_check():
     status = {
@@ -148,7 +192,6 @@ async def health_check():
         "model_loaded": model is not None,
         "kafka_consumer_running": kafka_consumer_task is not None and not kafka_consumer_task.done(),
     }
-    # Check DB connectivity
     try:
         async with engine.connect() as conn:
             await conn.execute(sqlalchemy.text("SELECT 1"))
@@ -160,22 +203,19 @@ async def health_check():
     if not model:
         status["status"] = "degraded"
 
-    status_code = 200 if status["status"] == "ok" else 503
-    if status_code == 503:
+    if status["status"] != "ok":
         raise HTTPException(status_code=503, detail=status)
     return status
 
 
-# --- Model Info Endpoint ---
 @app.get("/model")
 async def get_model_info():
     """Returns info about the currently loaded model."""
     return model_info
 
 
-# --- Model Reload Endpoint ---
 class ReloadRequest(BaseModel):
-    version: int | None = None  # If None, loads champion
+    version: int | None = None
 
 
 @app.post("/reload")
@@ -198,10 +238,9 @@ async def reload_model(request: ReloadRequest = ReloadRequest()):
         raise HTTPException(status_code=500, detail=f"Reload failed: {e}") from e
 
 
-# --- Prediction Endpoint ---
 @app.post("/predict")
 async def predict(request: PredictionRequest):
-    """Performs a live sentiment prediction on a single text input."""
+    """Performs sentiment + emotion prediction on a single text input."""
     global model
     if not model:
         raise HTTPException(status_code=503, detail="Model is not loaded yet. Please wait.")
@@ -214,21 +253,27 @@ async def predict(request: PredictionRequest):
         prediction = model.predict(data_df)
         PREDICTION_LATENCY.observe(_time.perf_counter() - start)
 
-        sentiment_score = float(prediction[0])
-        sentiment_label = "Positive" if sentiment_score == 1.0 else "Negative"
+        result = parse_prediction(prediction.iloc[0])
+        sentiment_label = result["sentiment_label"]
         PREDICTIONS_TOTAL.labels(sentiment=sentiment_label).inc()
 
-        return {"text": request.text, "sentiment_label": sentiment_label, "sentiment_score": sentiment_score}
+        top_emotion = result.get("top_emotion", "")
+        if top_emotion:
+            EMOTIONS_TOTAL.labels(emotion=top_emotion).inc()
+
+        return {
+            "text": request.text,
+            "sentiment_label": sentiment_label,
+            "sentiment_score": result.get("sentiment_score", 0),
+            "top_emotion": top_emotion,
+            "emotions": result.get("emotions", {}),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}") from e
 
 
 # --- Kafka Consumer Logic ---
 async def consume_messages():
-    """
-    Asynchronous background task to consume messages from Kafka
-    and write predictions to PostgreSQL.
-    """
     consumer = None
     delay = 5
 
@@ -272,18 +317,24 @@ async def consume_messages():
             prediction = model.predict(data_df)
             PREDICTION_LATENCY.observe(_time.perf_counter() - start)
 
-            sentiment_score = float(prediction[0])
-            sentiment_label = "Positive" if sentiment_score == 1.0 else "Negative"
+            result = parse_prediction(prediction.iloc[0])
+            sentiment_label = result["sentiment_label"]
+            top_emotion = result.get("top_emotion", "")
+            emotions = result.get("emotions", {})
             PREDICTIONS_TOTAL.labels(sentiment=sentiment_label).inc()
+            if top_emotion:
+                EMOTIONS_TOTAL.labels(emotion=top_emotion).inc()
 
-            logger.info(f"Prediction: '{kafka_msg.text}' -> {sentiment_label}")
+            logger.info(f"'{kafka_msg.text}' -> {sentiment_label} | {top_emotion}")
 
             async with AsyncSessionLocal() as session, session.begin():
                 session.add(
                     SentimentPrediction(
                         text=kafka_msg.text,
-                        sentiment_score=sentiment_score,
+                        sentiment_score=result.get("sentiment_score", 0),
                         sentiment_label=sentiment_label,
+                        top_emotion=top_emotion,
+                        emotions_json=json.dumps(emotions) if emotions else None,
                         message_timestamp=datetime.datetime.utcfromtimestamp(kafka_msg.timestamp),
                     )
                 )
