@@ -24,10 +24,17 @@ MLFLOW_MODEL_NAME = "giga-flow-sentiment"
 MLFLOW_MODEL_ALIAS = "champion"
 BATCH_SIZE = 100
 METRICS_PORT = 8001
+DRIFT_THRESHOLD = 0.05  # p-value below this = drift detected
+DRIFT_RETRAIN_AFTER = int(os.getenv("DRIFT_RETRAIN_AFTER", "3"))  # consecutive drift checks before retraining
+MODEL_SERVICE_URL = os.getenv("MODEL_SERVICE_URL", "http://model_service:8000")
 
 # --- PROMETHEUS METRICS ---
 DRIFT_SCORE = Gauge("sentiment_data_drift_score", "Data Drift Score (1 = Drift, 0 = No Drift)")
 DRIFT_P_VALUE = Gauge("sentiment_data_drift_p_value", "Data Drift P-Value")
+RETRAIN_TRIGGERED = Gauge("sentiment_retrain_triggered", "Retraining triggered (1 = yes)")
+
+# --- DRIFT STATE ---
+consecutive_drift_count = 0
 
 # --- GLOBAL VARS ---
 reference_data = None
@@ -79,24 +86,62 @@ async def run_drift_check(live_batch_df):
         logger.warning("Reference data not loaded, skipping drift check.")
         return
 
+    global consecutive_drift_count
+
     logger.info(f"Running drift check on {len(live_batch_df)} new records...")
     try:
         report = Report(metrics=[ValueDrift(column="text")])
         snapshot = report.run(reference_data=reference_data, current_data=live_batch_df)
 
-        # Extract drift result from metric_results
         result = list(snapshot.metric_results.values())[0]
         drift_score = float(result.value)
-        drift_detected = drift_score < 0.05  # p-value below threshold means drift
+        drift_detected = drift_score < DRIFT_THRESHOLD
         score = 1.0 if drift_detected else 0.0
 
-        logger.info(f"Drift Check Complete: drift_score={drift_score:.4f}, Drift Detected={drift_detected}")
+        logger.info(
+            f"Drift Check: score={drift_score:.4f}, Drift={drift_detected}, Consecutive={consecutive_drift_count}"
+        )
 
         DRIFT_SCORE.set(score)
         DRIFT_P_VALUE.set(drift_score)
 
+        # Track consecutive drift detections
+        if drift_detected:
+            consecutive_drift_count += 1
+            if consecutive_drift_count >= DRIFT_RETRAIN_AFTER:
+                logger.warning(f"Drift sustained for {consecutive_drift_count} checks — triggering retraining!")
+                await trigger_retraining()
+                consecutive_drift_count = 0
+        else:
+            consecutive_drift_count = 0
+
     except Exception as e:
         logger.error(f"Error during drift check: {e}")
+
+
+async def trigger_retraining():
+    """Trigger model retraining via model service reload or logging."""
+    import aiohttp
+
+    RETRAIN_TRIGGERED.set(1)
+    logger.info("Auto-retraining triggered due to sustained data drift.")
+
+    # Option 1: Reload champion model (if retraining happened externally)
+    try:
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(f"{MODEL_SERVICE_URL}/reload", timeout=aiohttp.ClientTimeout(total=120)) as resp,
+        ):
+            if resp.status == 200:
+                logger.info("Model service reloaded successfully.")
+            else:
+                logger.warning(f"Model reload returned {resp.status}")
+    except Exception as e:
+        logger.error(f"Failed to trigger reload: {e}")
+
+    # Reset after some time
+    await asyncio.sleep(60)
+    RETRAIN_TRIGGERED.set(0)
 
 
 async def kafka_consumer():
@@ -146,7 +191,18 @@ async def start_metrics_server():
         resp.content_type = "text/plain"
         return resp
 
+    async def handle_status(request):
+        return web.json_response(
+            {
+                "drift_detected": consecutive_drift_count > 0,
+                "consecutive_drift_checks": consecutive_drift_count,
+                "retrain_threshold": DRIFT_RETRAIN_AFTER,
+                "reference_data_loaded": reference_data is not None,
+            }
+        )
+
     app.router.add_get("/metrics", handle_metrics)
+    app.router.add_get("/status", handle_status)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", METRICS_PORT)

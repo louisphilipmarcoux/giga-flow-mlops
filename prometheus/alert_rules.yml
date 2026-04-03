@@ -37,6 +37,15 @@ groups:
           summary: "Kafka consumer lag is high"
           description: "Consumer group {{ $labels.consumergroup }} has a lag of {{ $value }} on topic {{ $labels.topic }}."
 
+      - alert: AutoRetrainingTriggered
+        expr: sentiment_retrain_triggered == 1
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "Auto-retraining triggered"
+          description: "Data drift was sustained and automatic model retraining has been triggered."
+
       - alert: DriftMonitorDown
         expr: up{job="drift_monitor"} == 0
         for: 2m
