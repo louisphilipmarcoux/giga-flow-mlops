@@ -1,4 +1,4 @@
-name: 🚀 Manual Model Training & Promotion
+name: Model Training & Promotion
 
 on:
   workflow_dispatch:
@@ -6,6 +6,7 @@ on:
 jobs:
   train-and-promote:
     runs-on: self-hosted
+    timeout-minutes: 120
 
     env:
       POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
@@ -14,21 +15,17 @@ jobs:
       MLFLOW_S3_ENDPOINT_URL: "http://localhost:9000"
       MINIO_USER: ${{ secrets.MINIO_USER }}
       MINIO_PASSWORD: ${{ secrets.MINIO_PASSWORD }}
-      DVC_S3_ENDPOINT_URL: "http://minio:9000"
-    
+
     steps:
-      - name: 1. Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
-      
-      # --- FIXED DVC STEP ---
-      - name: 2. DVC Checkout Data
+
+      - name: DVC Checkout Data
         id: dvc_pull
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
           echo "Pulling data using DVC from MinIO..."
-          
-          # Mount the current directory into the container so DVC can access .dvc files
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
             -v "${PWD}:/workspace" `
             -w /workspace `
@@ -37,26 +34,15 @@ jobs:
             producer /bin/bash -c "pip install dvc[s3] && dvc remote modify minio endpointurl http://minio:9000 && dvc pull"
 
           if ($LASTEXITCODE -ne 0) {
-              echo "::error::DVC pull command failed. The data could not be retrieved from MinIO."
+              echo "::error::DVC pull failed."
               exit 1
           }
-          echo "DVC pull successful. Data is now available in ./data."
-      # ---------------------------------------------
 
-      - name: 3. DEBUG - List all Docker containers
-        working-directory: ${{ github.workspace }}
-        shell: pwsh
-        run: |
-          echo "Listing all Docker containers visible to the runner..."
-          docker ps -a
-
-      - name: 4. Run the Training Notebook
+      - name: Run Training Notebook
         id: training
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
-          echo "Starting model training..."
-            
           docker-compose -f docker-compose.yml -p giga-flow-mlops run --rm `
             -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 `
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
@@ -69,7 +55,7 @@ jobs:
           echo $output_lines | Out-String
 
           if ($LASTEXITCODE -ne 0) {
-              echo "::error::The docker-compose command failed. See log above."
+              echo "::error::Training failed. See log above."
               exit 1
           }
 
@@ -81,28 +67,25 @@ jobs:
             echo "::error::Could not find MLFLOW_RUN_ID in training output."
             exit 1
           }
-          
+
           $run_id = $run_id_line[0].Matches[0].Groups[1].Value
           echo "Found new run ID: $run_id"
-          
           echo "run_id=$run_id" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: 5. Run the Smart Promotion Script
+      - name: Run Smart Promotion
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
-          echo "Starting model promotion check..."
           pip install -r requirements-dev.txt
-          
+
           $env:NEW_RUN_ID = "${{ steps.training.outputs.run_id }}"
           $env:MLFLOW_TRACKING_URI = "http://localhost:5000"
-          
+
           python scripts/promote_model.py
-          
-      - name: 6. (Optional) Restart the Model Service
+
+      - name: Restart Model Service
         if: success()
         working-directory: ${{ github.workspace }}
         shell: pwsh
         run: |
-          echo "Restarting model_service to load the new champion model..."
           docker restart model_service

@@ -1,17 +1,60 @@
 # Giga-Flow MLOps
 
-A complete, end-to-end MLOps pipeline for real-time sentiment analysis using HuggingFace DistilBERT, Kafka streaming, MLflow model registry, and comprehensive monitoring.
+[![CI](https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
+[![MLflow 2.9](https://img.shields.io/badge/MLflow-2.9-blue.svg)](https://mlflow.org)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
+
+A production-ready, end-to-end MLOps pipeline for **real-time sentiment analysis** using HuggingFace DistilBERT, Kafka streaming, MLflow model registry, and comprehensive monitoring.
+
+## Features
+
+- **Real-time inference** -- FastAPI service consuming from Kafka with batch prediction optimization
+- **Model registry** -- MLflow with automated champion promotion based on accuracy comparison
+- **Data versioning** -- DVC + MinIO for reproducible datasets and training pipelines
+- **Drift detection** -- Evidently AI monitors live data drift with Prometheus alerting
+- **Live dashboard** -- Streamlit UI for testing predictions and viewing sentiment distribution
+- **Full observability** -- Prometheus metrics, Grafana dashboards, custom prediction latency histograms
+- **CI/CD** -- GitHub Actions for automated testing and manual model training/promotion
+- **Container orchestration** -- 13 Docker services with health checks, restart policies, and resource limits
 
 ## Architecture
 
 ```
-Producer --> Kafka --> Model Service --> PostgreSQL
-                          |                  |
-                     MLflow (model)     Dashboard (Streamlit)
-                          |
-                     MinIO (artifacts)
+                    +------------------+
+                    |    Producer      |
+                    | (dummy data)     |
+                    +--------+---------+
+                             |
+                             v
+                    +------------------+
+                    |     Kafka        |
+                    | (streaming)      |
+                    +--------+---------+
+                             |
+              +--------------+--------------+
+              |                             |
+              v                             v
+    +------------------+          +------------------+
+    |  Model Service   |          |  Drift Monitor   |
+    |  (FastAPI)       |          |  (Evidently AI)  |
+    +--------+---------+          +--------+---------+
+             |                             |
+    +--------+---------+          +--------+---------+
+    |   PostgreSQL     |          |   Prometheus     |
+    |   (predictions)  |          |   (metrics)      |
+    +--------+---------+          +--------+---------+
+             |                             |
+    +--------+---------+          +--------+---------+
+    |   Dashboard      |          |    Grafana       |
+    |   (Streamlit)    |          |   (dashboards)   |
+    +------------------+          +------------------+
 
-Kafka --> Drift Monitor --> Prometheus --> Grafana
+    +------------------+          +------------------+
+    |   MLflow Server  |          |     MinIO        |
+    |   (registry)     +--------->|   (artifacts)    |
+    +------------------+          +------------------+
 ```
 
 ### Services (13 total)

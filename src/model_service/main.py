@@ -6,7 +6,7 @@ import datetime
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from aiokafka import AIOKafkaConsumer
 import sqlalchemy
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -28,8 +28,20 @@ PREDICTION_INPUT_LENGTH = Histogram(
 PREDICTIONS_TOTAL = Counter("predictions_total", "Total predictions made", ["sentiment"])
 
 # --- Pydantic Models ---
+MAX_TEXT_LENGTH = 10_000
+
 class PredictionRequest(BaseModel):
     text: str
+
+    @field_validator("text")
+    @classmethod
+    def text_must_not_be_empty_or_too_long(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("text must not be empty")
+        if len(v) > MAX_TEXT_LENGTH:
+            raise ValueError(f"text must not exceed {MAX_TEXT_LENGTH} characters")
+        return v
 
 class KafkaMessage(BaseModel):
     text: str

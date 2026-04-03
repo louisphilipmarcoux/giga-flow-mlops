@@ -1,4 +1,4 @@
-name: 🧪 CI - Run Tests
+name: CI
 
 on:
   pull_request:
@@ -7,7 +7,8 @@ on:
 jobs:
   run-pytest-suite:
     runs-on: self-hosted
-    
+    timeout-minutes: 30
+
     env:
       POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -15,69 +16,63 @@ jobs:
       MLFLOW_DB: ${{ secrets.MLFLOW_DB }}
       MINIO_USER: ${{ secrets.MINIO_USER }}
       MINIO_PASSWORD: ${{ secrets.MINIO_PASSWORD }}
-      
+      GRAFANA_ADMIN_PASSWORD: admin
+
     steps:
-      - name: 1. Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --- STEP 2: START SERVICES (MOVED UP) ---
-      - name: 2. Start All Services for Testing
+      - name: Start All Services
         run: |
-          echo "Building and starting all services in detached mode..."
+          echo "Building and starting all services..."
           docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci up -d --build
-          echo "Waiting for services to be healthy..."
-          sleep 30
 
-      # --- STEP 3: PULL DATA (MOVED DOWN, RENAMED) ---
-      - name: 3. Install DVC and Pull Data
+      - name: Wait for Services to be Healthy
+        shell: bash
+        run: |
+          echo "Waiting for services to be healthy..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:5001/health 2>/dev/null; then
+              echo "MLflow is healthy."
+              break
+            fi
+            echo "Waiting for MLflow... ($i/60)"
+            sleep 5
+          done
+
+      - name: Install DVC and Pull Data
         shell: pwsh
         env:
-          AWS_USE_SSL: "false" # Force disable SSL
+          AWS_USE_SSL: "false"
         run: |
-          echo "Installing DVC..."
           pip install dvc[s3]
-          
-          echo "Configuring DVC remote..."
-          dvc remote modify minio endpointurl http://localhost:9000
+          dvc remote modify minio endpointurl http://localhost:9002
           dvc remote modify minio access_key_id $env:MINIO_USER
           dvc remote modify minio secret_access_key $env:MINIO_PASSWORD
           dvc remote modify minio use_ssl false
           dvc remote modify minio url s3://mlflow-artifacts/files/md5
-          
-          echo "Pulling data from DVC..."
           dvc pull --force
-          
-          echo "Data pull complete."
 
-      # --- STEP 4: RUN TRAINING ---
-      - name: 4. Run a "CI" Model Training
+      - name: Run CI Model Training
         run: |
-          echo "Running a fast 'CI' mode training..."
           docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci exec -T `
             -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 `
             -e MLFLOW_S3_ENDPOINT_URL=http://minio:9000 `
             -e AWS_ACCESS_KEY_ID=$env:MINIO_USER `
             -e AWS_SECRET_ACCESS_KEY=$env:MINIO_PASSWORD `
-            producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_blog.ipynb && python -u src/notebooks/01_model_blog.py"
-          
-          echo "Restarting model_service to load the new model..."
+            producer /bin/bash -c "jupyter nbconvert --to script src/notebooks/01_model_training.ipynb && python -u src/notebooks/01_model_training.py"
+
           docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci restart model_service
 
-      # --- STEP 5: RUN TESTS ---
-      - name: 5. Run Pytest Suite
+      - name: Run Pytest Suite
         run: |
-          echo "Installing test dependencies..."
           pip install -r requirements-dev.txt
-          
-          echo "Running pytest..."
           pytest tests/ `
             --model-service-url=http://localhost:8001 `
             --mlflow-tracking-uri=http://localhost:5001 `
             --minio-endpoint-url=http://localhost:9002
-        
-      # --- STEP 6: CLEANUP ---
-      - name: 6. Cleanup Services (Always Runs)
+
+      - name: Cleanup Services
         if: always()
         run: |
-          echo "Cleaning up Docker Compose services..."
           docker-compose -f docker-compose.yml -f docker-compose.ci.yml -p giga-flow-mlops-ci down --volumes --remove-orphans
