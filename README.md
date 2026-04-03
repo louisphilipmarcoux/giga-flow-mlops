@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/ci.yml"><img src="https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/lint.yml"><img src="https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
+  <a href="https://github.com/louisphilipmarcoux/giga-flow-mlops/actions/workflows/ci.yml"><img src="https://github.com/louisphilipmarcoux/giga-flow-mlops/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/louisphilipmarcoux/giga-flow-mlops/actions/workflows/lint.yml"><img src="https://github.com/louisphilipmarcoux/giga-flow-mlops/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.11-3776AB.svg?logo=python&logoColor=white" alt="Python 3.11"></a>
   <a href="https://mlflow.org"><img src="https://img.shields.io/badge/MLflow-2.9-0194E2.svg?logo=mlflow&logoColor=white" alt="MLflow"></a>
