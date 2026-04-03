@@ -136,6 +136,87 @@ dummy_data = [
 TOPIC_NAME = "giga-flow-messages"
 KAFKA_SERVER = os.getenv("KAFKA_SERVER", "localhost:9092")
 
+# --- Dynamic text generation using Faker ---
+try:
+    from faker import Faker
+
+    fake = Faker(["en_US", "fr_FR", "es_ES", "de_DE", "it_IT", "pt_BR", "nl_NL"])
+
+    review_templates = [
+        # Positive templates
+        "I absolutely love {product}! {reason}.",
+        "The {product} is amazing, {reason}!",
+        "{product} exceeded all my expectations. {reason}.",
+        "Best {product} I've ever had! {reason}.",
+        "So happy with {product}, {reason}!",
+        # Negative templates
+        "I hate {product}, {reason}.",
+        "The {product} is terrible, {reason}.",
+        "Very disappointed with {product}. {reason}.",
+        "Worst {product} ever, {reason}.",
+        "{product} is a complete waste, {reason}.",
+        # Neutral templates
+        "The {product} is okay, {reason}.",
+        "{product} works as expected, {reason}.",
+        "Nothing special about {product}, {reason}.",
+    ]
+
+    products = [
+        "this product", "the app", "the service", "this restaurant",
+        "the new update", "customer support", "the delivery", "this tool",
+        "the subscription", "this device", "the software", "this course",
+    ]
+
+    positive_reasons = [
+        "it really changed my daily routine",
+        "the quality is outstanding",
+        "everything works perfectly",
+        "the team behind it is incredible",
+        "I can't recommend it enough",
+        "it saved me so much time",
+    ]
+
+    negative_reasons = [
+        "it broke after two days",
+        "the quality is terrible",
+        "nothing works as advertised",
+        "I wasted my money",
+        "support never responded",
+        "it's completely unusable",
+    ]
+
+    neutral_reasons = [
+        "it does what it claims",
+        "nothing stands out",
+        "I expected more for the price",
+        "it's average at best",
+        "no complaints but no excitement either",
+    ]
+
+    HAS_FAKER = True
+    logger.info("Faker loaded — dynamic text generation enabled.")
+except ImportError:
+    HAS_FAKER = False
+    logger.info("Faker not available — using hardcoded messages only.")
+
+
+def generate_message():
+    """Generate a message — mix of hardcoded and dynamically generated text."""
+    # 60% hardcoded (diverse multilingual), 40% generated (infinite variety)
+    if HAS_FAKER and random.random() < 0.4:
+        template = random.choice(review_templates)
+        product = random.choice(products)
+        if "love" in template or "amazing" in template or "happy" in template or "Best" in template:
+            reason = random.choice(positive_reasons)
+        elif "hate" in template or "terrible" in template or "disappointed" in template or "Worst" in template:
+            reason = random.choice(negative_reasons)
+        else:
+            reason = random.choice(neutral_reasons)
+        text = template.format(product=product, reason=reason)
+    else:
+        text = random.choice(dummy_data)
+    return text
+
 
 def init_producer():
     """Initialize KafkaProducer with retries and exponential backoff."""
@@ -159,17 +240,17 @@ producer = init_producer()
 
 
 def send_message():
-    """Simulates sending a single message to the Kafka topic."""
-    message = {"text": random.choice(dummy_data), "timestamp": time.time()}
-    logger.info(f"Sending message: {message}")
+    """Sends a message to the Kafka topic."""
+    message = {"text": generate_message(), "timestamp": time.time()}
+    logger.info(f"Sending: {message['text'][:80]}")
     producer.send(TOPIC_NAME, value=message)
     producer.flush()
 
 
 if __name__ == "__main__":
-    logger.info(f"Starting data producer with {len(dummy_data)} multilingual messages...")
+    logger.info(f"Starting data producer with {len(dummy_data)} hardcoded + dynamic messages...")
     logger.info(f"Sending messages to Kafka topic: '{TOPIC_NAME}'")
 
     while True:
         send_message()
-        time.sleep(random.randint(1, 5))
+        time.sleep(random.randint(1, 3))
