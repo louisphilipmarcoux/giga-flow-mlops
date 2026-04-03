@@ -214,7 +214,7 @@ with tab_models:
                 "Status": "👑 Champion" if is_champion else "",
                 "Accuracy": f"{metrics.get('accuracy', 0):.4f}" if metrics.get("accuracy") else "N/A",
                 "F1-Score": f"{metrics.get('f1_score', 0):.4f}" if metrics.get("f1_score") else "N/A",
-                "Model": params.get("model_name", "N/A"),
+                "Model": params.get("model_name") or params.get("sentiment_model", "N/A"),
                 "Dataset Size": params.get("dataset_size", "-"),
                 "Run ID": v.get("run_id", "")[:12],
             })

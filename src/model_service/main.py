@@ -110,6 +110,11 @@ def parse_prediction(prediction_row):
         try:
             data = json.loads(val)
             if isinstance(data, dict):
+                # Override sentiment with emotion-derived sentiment if top emotion is neutral
+                top_emotion = data.get("top_emotion", "")
+                if top_emotion in NEUTRAL_EMOTIONS:
+                    data["sentiment_label"] = "Neutral"
+                    data["sentiment_score"] = 0.5
                 return data
         except (json.JSONDecodeError, TypeError):
             pass
