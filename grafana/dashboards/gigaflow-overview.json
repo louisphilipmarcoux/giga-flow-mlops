@@ -9,7 +9,7 @@
       "title": "Model Service - Request Rate",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": null,
       "targets": [
         {
           "expr": "rate(starlette_requests_total[5m])",
@@ -25,10 +25,10 @@
       "title": "Model Service - Request Latency (p95)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": null,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(starlette_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(starlette_requests_processing_time_seconds_bucket[5m]))",
           "legendFormat": "p95 latency"
         }
       ],
@@ -38,10 +38,54 @@
       }
     },
     {
+      "title": "Prediction Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": null,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(prediction_latency_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(prediction_latency_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Predictions Total",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+      "datasource": null,
+      "targets": [
+        {
+          "expr": "sum(predictions_total)",
+          "legendFormat": "Total"
+        }
+      ]
+    },
+    {
+      "title": "Predictions by Sentiment",
+      "type": "piechart",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+      "datasource": null,
+      "targets": [
+        {
+          "expr": "predictions_total",
+          "legendFormat": "{{sentiment}}"
+        }
+      ]
+    },
+    {
       "title": "Data Drift Score",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 12 },
+      "datasource": null,
       "targets": [
         {
           "expr": "sentiment_data_drift_score",
@@ -66,8 +110,8 @@
     {
       "title": "Data Drift P-Value",
       "type": "gauge",
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 12 },
+      "datasource": null,
       "targets": [
         {
           "expr": "sentiment_data_drift_p_value",
@@ -92,8 +136,8 @@
     {
       "title": "Kafka Consumer Lag",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": null,
       "targets": [
         {
           "expr": "kafka_consumergroup_lag",
@@ -102,34 +146,30 @@
       ]
     },
     {
-      "title": "Container CPU Usage",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "title": "Requests in Progress",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 16 },
+      "datasource": null,
       "targets": [
         {
-          "expr": "rate(container_cpu_usage_seconds_total{name=~\"giga-flow.*\"}[5m])",
-          "legendFormat": "{{name}}"
+          "expr": "starlette_requests_in_progress",
+          "legendFormat": "In Progress"
         }
-      ],
-      "fieldConfig": {
-        "defaults": { "unit": "percentunit" },
-        "overrides": []
-      }
+      ]
     },
     {
-      "title": "Container Memory Usage",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "title": "Prediction Input Length (avg)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 16 },
+      "datasource": null,
       "targets": [
         {
-          "expr": "container_memory_usage_bytes{name=~\"giga-flow.*\"}",
-          "legendFormat": "{{name}}"
+          "expr": "rate(prediction_input_length_chars_sum[5m]) / rate(prediction_input_length_chars_count[5m])",
+          "legendFormat": "Avg chars"
         }
       ],
       "fieldConfig": {
-        "defaults": { "unit": "bytes" },
+        "defaults": { "unit": "short" },
         "overrides": []
       }
     }
