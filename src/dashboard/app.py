@@ -269,6 +269,54 @@ with tab_predict:
                             .properties(height=200, title="Emotion Breakdown")
                         )
                         st.altair_chart(chart, use_container_width=True)
+
+                # --- Feedback Section ---
+                st.markdown("---")
+                st.caption("Was this prediction correct?")
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("👍 Correct", key="fb_correct"):
+                        try:
+                            requests.post(
+                                f"{MODEL_SERVICE}/feedback",
+                                json={
+                                    "original_text": user_text,
+                                    "original_sentiment": sentiment,
+                                    "original_emotion": pred.get("top_emotion", ""),
+                                    "is_correct": True,
+                                },
+                                timeout=5,
+                            )
+                            st.success("Thanks for the feedback!")
+                        except Exception:
+                            st.error("Could not save feedback.")
+                with col_no:
+                    if st.button("👎 Incorrect", key="fb_incorrect"):
+                        st.session_state["show_correction"] = True
+
+                if st.session_state.get("show_correction"):
+                    correct_sentiment = st.selectbox(
+                        "What should the sentiment be?",
+                        ["Positive", "Negative", "Neutral"],
+                        key="correct_sent",
+                    )
+                    if st.button("Submit Correction", key="fb_submit"):
+                        try:
+                            requests.post(
+                                f"{MODEL_SERVICE}/feedback",
+                                json={
+                                    "original_text": user_text,
+                                    "original_sentiment": sentiment,
+                                    "original_emotion": pred.get("top_emotion", ""),
+                                    "corrected_sentiment": correct_sentiment,
+                                    "is_correct": False,
+                                },
+                                timeout=5,
+                            )
+                            st.success("Correction saved! This helps improve the model.")
+                            st.session_state["show_correction"] = False
+                        except Exception:
+                            st.error("Could not save feedback.")
         else:
             st.warning("Please enter some text.")
 
@@ -373,6 +421,22 @@ while True:
         else:
             latest = df.iloc[0]
             sentiment_emoji = EMOJI_MAP.get(latest["sentiment_label"], "🤔")
+
+            # --- Feedback Stats ---
+            try:
+                fb_resp = requests.get(f"{MODEL_SERVICE}/feedback/stats", timeout=5)
+                if fb_resp.status_code == 200:
+                    fb = fb_resp.json()
+                    if fb["total_feedback"] > 0:
+                        col_fb1, col_fb2, col_fb3 = st.columns(3)
+                        with col_fb1:
+                            st.metric("User Feedback", fb["total_feedback"])
+                        with col_fb2:
+                            st.metric("Correct", f"{fb['user_accuracy']:.0%}")
+                        with col_fb3:
+                            st.metric("Corrections", fb["incorrect"])
+            except Exception:
+                pass
 
             # --- Metrics Row ---
             col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)

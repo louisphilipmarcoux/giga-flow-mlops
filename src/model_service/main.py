@@ -54,6 +54,16 @@ class KafkaMessage(BaseModel):
     timestamp: float
 
 
+class FeedbackRequest(BaseModel):
+    prediction_id: int | None = None
+    original_text: str
+    original_sentiment: str
+    original_emotion: str | None = None
+    corrected_sentiment: str | None = None
+    corrected_emotion: str | None = None
+    is_correct: bool
+
+
 # --- Configuration ---
 KAFKA_TOPIC = "giga-flow-messages"
 KAFKA_SERVER = os.getenv("KAFKA_SERVER", "localhost:9092")
@@ -79,6 +89,19 @@ class SentimentPrediction(Base):
     emotions_json = Column(Text, nullable=True)
     message_timestamp = Column(DateTime)
     processed_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class PredictionFeedback(Base):
+    __tablename__ = "prediction_feedback"
+    id = Column(Integer, primary_key=True, index=True)
+    prediction_id = Column(Integer, nullable=True)
+    original_text = Column(String)
+    original_sentiment = Column(String)
+    original_emotion = Column(String, nullable=True)
+    corrected_sentiment = Column(String, nullable=True)
+    corrected_emotion = Column(String, nullable=True)
+    is_correct = Column(sqlalchemy.Boolean)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 # --- Emotion-to-Sentiment Mapping ---
@@ -306,6 +329,49 @@ async def predict(request: PredictionRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}") from e
+
+
+# --- Feedback Endpoints ---
+@app.post("/feedback")
+async def submit_feedback(request: FeedbackRequest):
+    """Submit feedback on a prediction (correct/incorrect + corrections)."""
+    async with AsyncSessionLocal() as session, session.begin():
+        session.add(
+            PredictionFeedback(
+                prediction_id=request.prediction_id,
+                original_text=request.original_text,
+                original_sentiment=request.original_sentiment,
+                original_emotion=request.original_emotion,
+                corrected_sentiment=request.corrected_sentiment,
+                corrected_emotion=request.corrected_emotion,
+                is_correct=request.is_correct,
+            )
+        )
+    logger.info(f"Feedback received: correct={request.is_correct}, text='{request.original_text[:50]}'")
+    return {"status": "saved"}
+
+
+@app.get("/feedback/stats")
+async def feedback_stats():
+    """Get feedback statistics."""
+    async with AsyncSessionLocal() as session:
+        total = await session.execute(sqlalchemy.text("SELECT COUNT(*) FROM prediction_feedback"))
+        correct = await session.execute(
+            sqlalchemy.text("SELECT COUNT(*) FROM prediction_feedback WHERE is_correct = true")
+        )
+        incorrect = await session.execute(
+            sqlalchemy.text("SELECT COUNT(*) FROM prediction_feedback WHERE is_correct = false")
+        )
+        total_val = total.scalar() or 0
+        correct_val = correct.scalar() or 0
+        incorrect_val = incorrect.scalar() or 0
+        accuracy = correct_val / total_val if total_val > 0 else 0
+        return {
+            "total_feedback": total_val,
+            "correct": correct_val,
+            "incorrect": incorrect_val,
+            "user_accuracy": round(accuracy, 4),
+        }
 
 
 # --- Kafka Consumer Logic ---
