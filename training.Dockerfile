@@ -1,6 +1,6 @@
-# Inference Dockerfile — uses pre-built base image with all deps.
+# Training Dockerfile — uses pre-built base image with training deps.
 # Rebuilds in seconds since only source code changes.
-FROM louisphilip/gigaflow-base:inference
+FROM louisphilip/gigaflow-base:training
 
 USER appuser
 WORKDIR /home/appuser/app

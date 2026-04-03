@@ -1,0 +1,7 @@
+# Inference dependencies (CPU-only PyTorch)
+-r requirements-inference.txt
+
+# Training extras
+scikit-learn==1.8.0
+nbconvert==7.17.0
+ipykernel==6.29.5

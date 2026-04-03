@@ -61,3 +61,9 @@ dvc-pull: ## Pull data from DVC remote
 install: ## Install development dependencies
 	pip install -r requirements-dev.txt
 	pre-commit install
+
+base-build: ## Build and push base Docker images (one-time, slow)
+	docker build -f base.Dockerfile -t louisphilip/gigaflow-base:inference .
+	docker build -f base-training.Dockerfile -t louisphilip/gigaflow-base:training .
+	docker push louisphilip/gigaflow-base:inference
+	docker push louisphilip/gigaflow-base:training

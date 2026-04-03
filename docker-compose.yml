@@ -176,7 +176,7 @@ services:
   producer:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: training.Dockerfile
     restart: unless-stopped
     networks:
       - gigaflow-net
@@ -188,7 +188,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 4G
     environment:
       KAFKA_SERVER: "kafka:29092"
       MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"

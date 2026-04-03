@@ -10,6 +10,7 @@ aiohttp==3.13.5
 # --- Data & ML ---
 mlflow==2.9.2
 transformers==4.49.0
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.6.0
 accelerate==1.13.0
 evidently==0.7.21
