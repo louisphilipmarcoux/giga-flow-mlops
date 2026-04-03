@@ -234,7 +234,9 @@ class ReloadRequest(BaseModel):
 
 
 @app.post("/reload")
-async def reload_model(request: ReloadRequest = ReloadRequest()):
+async def reload_model(request: ReloadRequest | None = None):
+    if request is None:
+        request = ReloadRequest()
     """Hot-swap the model. Optionally specify a version number."""
     global model, model_info
     if request.version:

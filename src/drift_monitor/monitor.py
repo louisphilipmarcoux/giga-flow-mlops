@@ -93,7 +93,7 @@ async def run_drift_check(live_batch_df):
         logger.info(f"Drift Check Complete: drift_score={drift_score:.4f}, Drift Detected={drift_detected}")
 
         DRIFT_SCORE.set(score)
-        DRIFT_P_VALUE.set(p_value)
+        DRIFT_P_VALUE.set(drift_score)
 
     except Exception as e:
         logger.error(f"Error during drift check: {e}")
