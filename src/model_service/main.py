@@ -81,6 +81,7 @@ class SentimentPrediction(Base):
 
 # --- Model & Consumer Globals ---
 model = None
+model_info = {"uri": None, "version": None, "alias": None}
 kafka_consumer_task = None
 
 
@@ -93,7 +94,7 @@ async def create_db_and_tables():
 @asynccontextmanager
 async def lifespan(app):
     """Manage startup and shutdown lifecycle."""
-    global model, kafka_consumer_task
+    global model, model_info, kafka_consumer_task
 
     logger.info("Creating database tables...")
     await create_db_and_tables()
@@ -106,6 +107,7 @@ async def lifespan(app):
     while retries > 0:
         try:
             model = mlflow.pyfunc.load_model(model_uri)
+            model_info = {"uri": model_uri, "version": "champion", "alias": MLFLOW_MODEL_ALIAS}
             logger.info(f"Model {MLFLOW_MODEL_NAME} (Alias: {MLFLOW_MODEL_ALIAS}) loaded successfully.")
             break
         except Exception as e:
@@ -164,6 +166,13 @@ async def health_check():
     return status
 
 
+# --- Model Info Endpoint ---
+@app.get("/model")
+async def get_model_info():
+    """Returns info about the currently loaded model."""
+    return model_info
+
+
 # --- Model Reload Endpoint ---
 class ReloadRequest(BaseModel):
     version: int | None = None  # If None, loads champion
@@ -172,15 +181,18 @@ class ReloadRequest(BaseModel):
 @app.post("/reload")
 async def reload_model(request: ReloadRequest = ReloadRequest()):
     """Hot-swap the model. Optionally specify a version number."""
-    global model
+    global model, model_info
     if request.version:
         model_uri = f"models:/{MLFLOW_MODEL_NAME}/{request.version}"
+        label = f"v{request.version}"
     else:
         model_uri = f"models:/{MLFLOW_MODEL_NAME}@{MLFLOW_MODEL_ALIAS}"
+        label = "champion"
     try:
         model = mlflow.pyfunc.load_model(model_uri)
+        model_info = {"uri": model_uri, "version": label, "alias": MLFLOW_MODEL_ALIAS if not request.version else None}
         logger.info(f"Model reloaded: {model_uri}")
-        return {"status": "reloaded", "uri": model_uri}
+        return {"status": "reloaded", **model_info}
     except Exception as e:
         logger.error(f"Failed to reload model: {e}")
         raise HTTPException(status_code=500, detail=f"Reload failed: {e}") from e
