@@ -160,12 +160,14 @@ with tab_models:
 
     # Show currently loaded model
     try:
-        model_resp = requests.get("http://model_service:8000/model", timeout=5)
+        model_resp = requests.get("http://model_service:8000/model", timeout=15)
         if model_resp.status_code == 200:
             current = model_resp.json()
             st.info(f"🔵 **Currently loaded:** {current.get('version', 'unknown')} — `{current.get('uri', 'N/A')}`")
+        else:
+            st.warning("Model service returned an error.")
     except Exception:
-        st.warning("Could not fetch current model info.")
+        st.warning("Model service is loading... refresh in a moment.")
 
     champion_version = get_champion_version()
     versions = load_model_versions()
