@@ -17,12 +17,14 @@ MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5000")
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-QUERY = text(
+QUERY_RECENT = text(
     "SELECT processed_at, text, sentiment_label, sentiment_score"
     " FROM sentiment_predictions"
     " ORDER BY processed_at DESC"
     " LIMIT 100"
 )
+
+QUERY_COUNT = text("SELECT COUNT(*) as total FROM sentiment_predictions")
 
 # --- Streamlit App ---
 
@@ -48,38 +50,39 @@ engine = get_db_connection()
 
 
 def load_data():
-    """Loads prediction data from the database."""
+    """Loads recent prediction data from the database."""
     if engine is None:
         return pd.DataFrame()
     try:
         with engine.connect() as conn:
-            return pd.read_sql(QUERY, conn)
+            return pd.read_sql(QUERY_RECENT, conn)
     except Exception as e:
         st.warning(f"Could not load data: {e}")
         return pd.DataFrame()
 
 
+def load_total_count():
+    """Gets total prediction count."""
+    if engine is None:
+        return 0
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(QUERY_COUNT)
+            return result.scalar() or 0
+    except Exception:
+        return 0
+
+
 def load_model_versions():
-    """Fetches model versions from MLflow API."""
+    """Fetches all model versions from MLflow API."""
     try:
         resp = requests.get(
-            f"{MLFLOW_URI}/api/2.0/mlflow/registered-models/get",
-            params={"name": "giga-flow-sentiment"},
+            f"{MLFLOW_URI}/api/2.0/mlflow/model-versions/search",
+            params={"filter": "name='giga-flow-sentiment'", "max_results": "100"},
             timeout=5,
         )
         if resp.status_code == 200:
-            model_data = resp.json()
-            versions = model_data.get("registered_model", {}).get("latest_versions", [])
-            if not versions:
-                # Try search API
-                resp2 = requests.get(
-                    f"{MLFLOW_URI}/api/2.0/mlflow/model-versions/search",
-                    params={"filter": "name='giga-flow-sentiment'", "order_by": "version_number DESC"},
-                    timeout=5,
-                )
-                if resp2.status_code == 200:
-                    versions = resp2.json().get("model_versions", [])
-            return versions
+            return resp.json().get("model_versions", [])
         return []
     except Exception:
         return []
@@ -187,6 +190,7 @@ with tab_models:
 # --- Main Loop (updates dashboard tab) ---
 while True:
     df = load_data()
+    total_count = load_total_count()
 
     with dashboard_placeholder.container():
         if df.empty:
@@ -197,7 +201,7 @@ while True:
 
             col_metric1, col_metric2, col_metric3 = st.columns(3)
             with col_metric1:
-                st.metric("Total Predictions", len(df))
+                st.metric("Total Predictions", f"{total_count:,}")
             with col_metric2:
                 pos_pct = (df["sentiment_label"] == "Positive").mean() * 100
                 st.metric("Positive %", f"{pos_pct:.1f}%")
