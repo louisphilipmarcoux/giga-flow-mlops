@@ -90,7 +90,7 @@ NEGATIVE_EMOTIONS = {
     "anger", "annoyance", "disappointment", "disapproval", "disgust",
     "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness",
 }
-NEUTRAL_EMOTIONS = {"neutral", "realization", "surprise", "confusion", "curiosity"}
+NEUTRAL_EMOTIONS = {"neutral", "realization", "confusion", "curiosity"}
 
 
 def emotions_to_sentiment(top_emotion):

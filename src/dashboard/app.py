@@ -299,7 +299,7 @@ while True:
                 sentiment_counts = df["sentiment_label"].value_counts().reset_index()
                 sentiment_counts.columns = ["sentiment_label", "count"]
 
-                color_scale = alt.Scale(domain=["Negative", "Positive"], range=["#FF4B4B", "#00F2A9"])
+                color_scale = alt.Scale(domain=["Negative", "Neutral", "Positive"], range=["#FF4B4B", "#FFD700", "#00F2A9"])
 
                 chart = (
                     alt.Chart(sentiment_counts)
