@@ -215,14 +215,18 @@ with tab_predict:
     col_input, col_lang = st.columns([3, 1])
     with col_lang:
         language = st.selectbox("Language examples:", list(LANGUAGE_EXAMPLES.keys()))
-    with col_input:
-        user_text = st.text_area("Enter text to analyze:", height=100, placeholder="Type anything in any language...")
 
     # Quick example buttons
     st.caption("Try an example:")
     for i, example in enumerate(LANGUAGE_EXAMPLES[language]):
         if st.button(example, key=f"ex_{language}_{i}"):
-            user_text = example
+            st.session_state["analyze_text"] = example
+
+    with col_input:
+        default_text = st.session_state.get("analyze_text", "")
+        user_text = st.text_area("Enter text to analyze:", value=default_text, height=100, placeholder="Type anything in any language...")
+        if user_text != default_text:
+            st.session_state["analyze_text"] = user_text
 
     if st.button("🔍 Analyze", type="primary") or user_text:
         if user_text:
@@ -237,7 +241,6 @@ with tab_predict:
 
                 with col_result:
                     st.markdown(f"### {emoji} {sentiment}")
-                    st.metric("Confidence", f"{pred.get('sentiment_score', 0):.0%}")
                     top_emotion = pred.get("top_emotion", "")
                     if top_emotion:
                         st.metric("Top Emotion", top_emotion)
