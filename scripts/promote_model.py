@@ -22,7 +22,11 @@ def promote_model(new_run_id):
     try:
         new_run = client.get_run(new_run_id)
         new_accuracy = new_run.data.metrics.get("accuracy", 0)
-        new_version = client.get_latest_versions(MODEL_NAME, stages=None)[0]
+        versions = client.search_model_versions(f"run_id='{new_run_id}'")
+        if not versions:
+            print(f"Error: No model version found for run_id={new_run_id}")
+            sys.exit(1)
+        new_version = versions[0]
         print(f"New Model (Version {new_version.version}): Accuracy = {new_accuracy:.4f}")
     except Exception as e:
         print(f"Error fetching new model data: {e}")

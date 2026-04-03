@@ -51,7 +51,7 @@ def mock_mlflow_client():
     
     # Simulate the "new" model (version 2)
     new_version = MockVersion(version="2", run_id=MOCK_RUN_ID)
-    client.get_latest_versions.return_value = [new_version]
+    client.search_model_versions.return_value = [new_version]
 
     # Use a side_effect to return the correct run based on run_id
     def get_run_side_effect(run_id):

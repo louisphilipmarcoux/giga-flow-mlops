@@ -1,8 +1,10 @@
 import asyncio
 import json
+import logging
 import pandas as pd
 import datetime
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from aiokafka import AIOKafkaConsumer
@@ -11,10 +13,27 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, Integer, String, Float, DateTime
 from starlette_prometheus import PrometheusMiddleware, metrics
+from prometheus_client import Histogram, Counter
+import time as _time
 
-# --- NEW Pydantic Model ---
+logger = logging.getLogger("model_service")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+
+# --- Custom Prometheus Metrics ---
+PREDICTION_LATENCY = Histogram("prediction_latency_seconds", "Prediction inference latency in seconds")
+PREDICTION_INPUT_LENGTH = Histogram(
+    "prediction_input_length_chars", "Input text length in characters",
+    buckets=[10, 50, 100, 200, 500, 1000, 2000, 5000]
+)
+PREDICTIONS_TOTAL = Counter("predictions_total", "Total predictions made", ["sentiment"])
+
+# --- Pydantic Models ---
 class PredictionRequest(BaseModel):
     text: str
+
+class KafkaMessage(BaseModel):
+    text: str
+    timestamp: float
 
 # --- Configuration ---
 KAFKA_TOPIC = "giga-flow-messages"
@@ -28,7 +47,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://gigaflow:password
 import mlflow
 
 # --- SQLAlchemy Setup ---
-engine = create_async_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(DATABASE_URL, echo=False, pool_size=10, max_overflow=20, pool_pre_ping=True)
 Base = declarative_base()
 AsyncSessionLocal = sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False
@@ -39,162 +58,219 @@ class SentimentPrediction(Base):
     __tablename__ = "sentiment_predictions"
     id = Column(Integer, primary_key=True, index=True)
     text = Column(String, index=True)
-    sentiment_score = Column(Float) # Use Float for scores, or Integer for 0/1
+    sentiment_score = Column(Float)
     sentiment_label = Column(String)
     message_timestamp = Column(DateTime)
-    processed_at = Column(DateTime, default=datetime.datetime.utcnow)
+    processed_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
-# --- FastAPI App ---
-app = FastAPI(title="GigaFlow Model Service")
-
-app.add_middleware(PrometheusMiddleware)
-
-app.add_route("/metrics", metrics)
-
-# --- Model & DB Globals ---
+# --- Model & Consumer Globals ---
 model = None
-db_engine = None
+kafka_consumer_task = None
 
 async def create_db_and_tables():
     """Create the table in the database."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-@app.on_event("startup")
-async def startup_event():
-    """
-    On app startup:
-    1. Create database tables.
-    2. Load the MLflow model (with retries).
-    3. Start the Kafka consumer.
-    """
-    global model, engine
-    
-    print("Creating database tables...")
-    await create_db_and_tables()
-    print("Database tables created.")
+@asynccontextmanager
+async def lifespan(app):
+    """Manage startup and shutdown lifecycle."""
+    global model, kafka_consumer_task
 
-    print("Loading MLflow model...")
+    logger.info("Creating database tables...")
+    await create_db_and_tables()
+    logger.info("Database tables created.")
+
+    logger.info("Loading MLflow model...")
     model_uri = f"models:/{MLFLOW_MODEL_NAME}@{MLFLOW_MODEL_ALIAS}"
-    
-    # --- NEW RETRY LOOP FOR MLFLOW ---
+
     retries = 10
     while retries > 0:
         try:
             model = mlflow.pyfunc.load_model(model_uri)
-            print(f"Model {MLFLOW_MODEL_NAME} (Alias: {MLFLOW_MODEL_ALIAS}) loaded successfully.")
-            break  # Success!
+            logger.info(f"Model {MLFLOW_MODEL_NAME} (Alias: {MLFLOW_MODEL_ALIAS}) loaded successfully.")
+            break
         except Exception as e:
-            print(f"Failed to load model (MLflow server may not be ready): {e}")
+            logger.warning(f"Failed to load model (MLflow server may not be ready): {e}")
             retries -= 1
             if retries == 0:
-                print("Could not load model after several retries. Exiting.")
-                raise  # Raise the last exception and crash the service
-            print("Retrying in 5 seconds...")
+                logger.error("Could not load model after several retries. Exiting.")
+                raise
+            logger.info("Retrying in 5 seconds...")
             await asyncio.sleep(5)
-    # --- END OF RETRY LOOP ---
 
-    print("Starting Kafka consumer...")
-    asyncio.create_task(consume_messages())
+    logger.info("Starting Kafka consumer...")
+    kafka_consumer_task = asyncio.create_task(consume_messages())
+
+    yield
+
+    # Shutdown: cancel Kafka consumer
+    if kafka_consumer_task:
+        kafka_consumer_task.cancel()
+        try:
+            await kafka_consumer_task
+        except asyncio.CancelledError:
+            logger.info("Kafka consumer task cancelled.")
+
+# --- FastAPI App ---
+app = FastAPI(title="GigaFlow Model Service", lifespan=lifespan)
+
+app.add_middleware(PrometheusMiddleware)
+app.add_route("/metrics", metrics)
 
 # --- Health Check Endpoint ---
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    status = {
+        "status": "ok",
+        "model_loaded": model is not None,
+        "kafka_consumer_running": kafka_consumer_task is not None and not kafka_consumer_task.done(),
+    }
+    # Check DB connectivity
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(sqlalchemy.text("SELECT 1"))
+        status["database"] = "connected"
+    except Exception:
+        status["database"] = "disconnected"
+        status["status"] = "degraded"
 
-# --- NEW PREDICTION ENDPOINT ---
+    if not model:
+        status["status"] = "degraded"
+
+    status_code = 200 if status["status"] == "ok" else 503
+    if status_code == 503:
+        raise HTTPException(status_code=503, detail=status)
+    return status
+
+# --- Prediction Endpoint ---
 @app.post("/predict")
 async def predict(request: PredictionRequest):
-    """
-    Performs a live sentiment prediction on a single text input.
-    """
+    """Performs a live sentiment prediction on a single text input."""
     global model
     if not model:
-        # If the model isn't loaded yet, return a 503 Service Unavailable
         raise HTTPException(status_code=503, detail="Model is not loaded yet. Please wait.")
-    
+
     try:
-        # 1. Create a DataFrame for prediction
+        PREDICTION_INPUT_LENGTH.observe(len(request.text))
         data_df = pd.DataFrame({'text': [request.text]})
-        
-        # 2. Run prediction
-        # Our MLflow wrapper ensures this returns 0 or 1
+
+        start = _time.perf_counter()
         prediction = model.predict(data_df)
-        
-        # 3. Format the output
+        PREDICTION_LATENCY.observe(_time.perf_counter() - start)
+
         sentiment_score = float(prediction[0])
         sentiment_label = 'Positive' if sentiment_score == 1.0 else 'Negative'
-        
+        PREDICTIONS_TOTAL.labels(sentiment=sentiment_label).inc()
+
         return {
             "text": request.text,
             "sentiment_label": sentiment_label,
             "sentiment_score": sentiment_score
         }
     except Exception as e:
-        # Catch any errors during prediction
         raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}")
 
-# --- Kafka Consumer Logic (UPDATED) ---
+# --- Kafka Consumer Logic ---
+BATCH_SIZE = 16
+BATCH_TIMEOUT = 0.5  # seconds
+
 async def consume_messages():
     """
-    Asynchronous background task to consume messages from Kafka
-    and write predictions to PostgreSQL.
+    Asynchronous background task to consume messages from Kafka,
+    batch predictions, and write to PostgreSQL.
     """
     consumer = None
-    
+    delay = 5
+
     while True:
         try:
-            print(f"Attempting to connect consumer to Kafka at {KAFKA_SERVER}...")
+            logger.info(f"Attempting to connect consumer to Kafka at {KAFKA_SERVER}...")
             consumer = AIOKafkaConsumer(
                 KAFKA_TOPIC,
                 bootstrap_servers=KAFKA_SERVER,
                 value_deserializer=lambda v: json.loads(v.decode('utf-8')),
                 group_id="aiokafka-consumer"
             )
-            # Start the consumer. This is the part that will fail if Kafka isn't ready.
             await consumer.start()
-            print("Kafka consumer connected successfully.")
-            break  # Exit the loop if connection is successful
+            logger.info("Kafka consumer connected successfully.")
+            break
         except Exception as e:
-            print(f"Consumer connection failed: {e}. Retrying in 5 seconds...")
-            await asyncio.sleep(5)
+            logger.warning(f"Consumer connection failed: {e}. Retrying in {delay} seconds...")
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 60)
             if consumer:
-                # Ensure we stop the partially started consumer before retrying
                 await consumer.stop()
 
-    # If we're here, the consumer started successfully
-    print("Kafka consumer started and polling...")
-    
+    logger.info("Kafka consumer started and polling...")
+
+    batch = []
+
+    async def flush_batch():
+        """Process a batch of messages: predict and write to DB."""
+        nonlocal batch
+        if not batch:
+            return
+
+        current_batch = batch
+        batch = []
+
+        if not model:
+            logger.warning(f"Model not loaded, skipping {len(current_batch)} messages.")
+            return
+
+        # Batch prediction
+        texts = [msg.text for msg in current_batch]
+        data_df = pd.DataFrame({'text': texts})
+
+        start = _time.perf_counter()
+        predictions = model.predict(data_df)
+        latency = _time.perf_counter() - start
+        PREDICTION_LATENCY.observe(latency / len(texts))  # per-item latency
+
+        # Build DB records
+        records = []
+        for kafka_msg, pred in zip(current_batch, predictions):
+            sentiment_score = float(pred)
+            sentiment_label = 'Positive' if sentiment_score == 1.0 else 'Negative'
+            PREDICTIONS_TOTAL.labels(sentiment=sentiment_label).inc()
+            PREDICTION_INPUT_LENGTH.observe(len(kafka_msg.text))
+
+            records.append(SentimentPrediction(
+                text=kafka_msg.text,
+                sentiment_score=sentiment_score,
+                sentiment_label=sentiment_label,
+                message_timestamp=datetime.datetime.fromtimestamp(
+                    kafka_msg.timestamp, tz=datetime.timezone.utc
+                )
+            ))
+
+        # Batch insert to DB
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                session.add_all(records)
+
+        logger.info(f"Batch of {len(records)} predictions saved to database in {latency:.3f}s.")
+
     try:
         async for msg in consumer:
-            print(f"\nReceived message: {msg.value}")
-            text_input = msg.value.get('text')
-            msg_timestamp = msg.value.get('timestamp')
-            
-            if text_input and model:
-                data_df = pd.DataFrame({'text': [text_input]})
-                prediction = model.predict(data_df)
-                
-                # Convert prediction to friendly format
-                sentiment_score = float(prediction[0]) # Assuming model returns 0 or 1
-                sentiment_label = 'Positive' if sentiment_score == 1.0 else 'Negative'
-                
-                print(f"Prediction: '{text_input}' -> {sentiment_label}")
+            # Validate Kafka message with Pydantic
+            try:
+                kafka_msg = KafkaMessage(**msg.value)
+            except Exception as e:
+                logger.warning(f"Invalid Kafka message, skipping: {e}")
+                continue
 
-                # --- Write to Database ---
-                async with AsyncSessionLocal() as session:
-                    async with session.begin():
-                        prediction_record = SentimentPrediction(
-                            text=text_input,
-                            sentiment_score=sentiment_score,
-                            sentiment_label=sentiment_label,
-                            message_timestamp=datetime.datetime.fromtimestamp(msg_timestamp)
-                        )
-                        session.add(prediction_record)
-                        await session.commit()
-                print("Prediction saved to database.")
-                
+            batch.append(kafka_msg)
+
+            if len(batch) >= BATCH_SIZE:
+                await flush_batch()
+
+        # Flush remaining messages
+        await flush_batch()
+
     finally:
+        await flush_batch()
         if consumer:
             await consumer.stop()
-            print("Kafka consumer stopped.")
+            logger.info("Kafka consumer stopped.")

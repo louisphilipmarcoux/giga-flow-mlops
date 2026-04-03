@@ -1,0 +1,17 @@
+stages:
+  train:
+    cmd: >
+      jupyter nbconvert --to script src/notebooks/01_model_training.ipynb --stdout |
+      python -
+    deps:
+      - data/IMDB Dataset.csv
+      - src/notebooks/01_model_training.ipynb
+    params:
+      - training
+      - model
+      - mlflow
+
+  promote:
+    cmd: python scripts/promote_model.py
+    deps:
+      - scripts/promote_model.py

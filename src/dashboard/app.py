@@ -72,8 +72,9 @@ st.markdown("---")  # Add a visual separator
 # Placeholder for the data
 data_placeholder = st.empty()
 
+@st.cache_resource
 def get_db_connection():
-    """Creates a SQLAlchemy engine."""
+    """Creates a SQLAlchemy engine (cached across reruns)."""
     try:
         engine = create_engine(DATABASE_URL)
         return engine

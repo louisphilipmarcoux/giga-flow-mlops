@@ -1,0 +1,47 @@
+groups:
+  - name: gigaflow_alerts
+    rules:
+      - alert: DataDriftDetected
+        expr: sentiment_data_drift_score == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Data drift detected in sentiment model"
+          description: "The drift monitor has detected data drift for more than 5 minutes. Consider retraining the model."
+
+      - alert: ModelServiceDown
+        expr: up{job="model_service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Model service is down"
+          description: "The model service has been unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: rate(starlette_requests_total{status_code=~"5.."}[5m]) / rate(starlette_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on model service"
+          description: "More than 5% of requests are returning 5xx errors."
+
+      - alert: KafkaConsumerLagHigh
+        expr: kafka_consumergroup_lag > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag is high"
+          description: "Consumer group {{ $labels.consumergroup }} has a lag of {{ $value }} on topic {{ $labels.topic }}."
+
+      - alert: DriftMonitorDown
+        expr: up{job="drift_monitor"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Drift monitor is down"
+          description: "The drift monitoring service has been unreachable for more than 2 minutes."

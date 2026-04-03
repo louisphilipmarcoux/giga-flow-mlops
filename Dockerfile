@@ -9,14 +9,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y build-essential
 
 # Copy only the requirements file first to leverage Docker caching
-COPY requirements.txt .
+COPY requirements-inference.txt .
 
 # Create a virtual environment and install dependencies
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-inference.txt
 
 # --- STAGE 2: Build the final 'runtime' image ---
 FROM python:3.11-slim
@@ -31,6 +31,7 @@ COPY --chown=appuser:appuser --from=builder /opt/venv /opt/venv
 
 # Copy the application source code
 COPY --chown=appuser:appuser src/ src/
+COPY --chown=appuser:appuser scripts/ scripts/
 
 # Set the PATH to use the venv
 ENV PATH="/opt/venv/bin:$PATH"

@@ -1,0 +1,15 @@
+training:
+  training_mode: "FULL"
+  test_size: 0.2
+  random_state: 42
+  ci_sample_size: 10000
+  batch_size: 32
+
+model:
+  name: "distilbert-base-uncased-finetuned-sst-2-english"
+  max_sequence_length: 512
+  registered_name: "giga-flow-sentiment"
+
+mlflow:
+  experiment_name: "GigaFlow-Sentiment"
+  champion_alias: "champion"

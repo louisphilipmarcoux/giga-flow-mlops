@@ -39,7 +39,10 @@ def test_health_check(client):
     """
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["model_loaded"] is True
+    assert data["database"] == "connected"
 
 def test_predict_endpoint(client):
     """

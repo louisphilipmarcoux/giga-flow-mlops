@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: 'GigaFlow'
+    orgId: 1
+    folder: 'GigaFlow'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

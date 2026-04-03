@@ -2,7 +2,6 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pandas==2.2.3
-scikit-learn==1.5.2
 sqlalchemy==2.0.35
 starlette-prometheus==0.10.0
 aiohttp==3.10.10
@@ -10,9 +9,11 @@ aiohttp==3.10.10
 # --- Data & ML ---
 mlflow==2.9.2
 transformers==4.45.2
-torch==2.4.1
 accelerate==1.0.1
 evidently==0.4.33
+# CPU-only PyTorch (saves ~1.5GB vs full torch)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
 
 # --- Metrics ---
 prometheus_client==0.21.0
@@ -23,7 +24,3 @@ aiokafka==0.11.0
 psycopg2-binary==2.9.9
 asyncpg==0.29.0
 boto3==1.35.36
-
-# --- Training (needed in producer container) ---
-nbconvert==7.16.4
-ipykernel==6.29.5

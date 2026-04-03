@@ -1,120 +1,209 @@
-# **Giga-Flow MLOps 🚀**
+# Giga-Flow MLOps
 
-This project is a complete, end-to-end MLOps pipeline demonstrating a real-time sentiment analysis system.
+A complete, end-to-end MLOps pipeline for real-time sentiment analysis using HuggingFace DistilBERT, Kafka streaming, MLflow model registry, and comprehensive monitoring.
 
-It uses Kafka for message streaming, MLflow for model versioning and registry, and a FastAPI service to perform live inference and store results in a PostgreSQL database.
+## Architecture
 
-## **🏛️ Architecture**
+```
+Producer --> Kafka --> Model Service --> PostgreSQL
+                          |                  |
+                     MLflow (model)     Dashboard (Streamlit)
+                          |
+                     MinIO (artifacts)
 
-The data flows through the system as follows:
+Kafka --> Drift Monitor --> Prometheus --> Grafana
+```
 
-1. **producer**: A Python script that simulates a live data feed by sending random text messages (e.g., "I love this product\!") to a Kafka topic.  
-2. **kafka**: The message broker that receives messages from the producer and holds them for the model\_service.  
-3. **mlflow\_server**: Hosts the MLflow UI and Model Registry. This is where our trained sentiment models are stored, versioned, and aliased (e.g., as "champion").  
-4. **model\_service**: A FastAPI application that:  
-   * On startup, connects to the mlflow\_server and downloads the model marked with the "champion" alias.  
-   * Consumes messages from the Kafka topic.  
-   * Uses the loaded model to predict the sentiment of each message.  
-   * Saves the message text, prediction, and timestamps to the postgres\_db.  
-5. **postgres\_db**: The final destination database that stores all predictions for later analysis or to power a dashboard.
+### Services (13 total)
 
-## **🛠️ Technology Stack**
+| Service | Purpose | Port |
+|---------|---------|------|
+| **producer** | Simulates live data feed to Kafka | - |
+| **kafka** | Message broker (with Zookeeper) | 29092 |
+| **mlflow_server** | Model registry & tracking UI | 5000 |
+| **model_service** | FastAPI inference + Kafka consumer | 8000 |
+| **postgres_db** | Predictions & MLflow backend store | 5432 |
+| **minio** | S3-compatible artifact storage | 9000/9001 |
+| **dashboard** | Streamlit live monitoring UI | 8501 |
+| **drift_monitor** | Evidently AI data drift detection | 8001 |
+| **prometheus** | Metrics collection & alerting | 9090 |
+| **grafana** | Metrics visualization dashboards | 3000 |
+| **kafka_exporter** | Kafka metrics for Prometheus | 9308 |
+| **cadvisor** | Container resource monitoring | 8080 |
 
-* **Orchestration:** Docker & Docker Compose  
-* **Streaming:** Kafka  
-* **Model Registry:** MLflow (v2.9.2)  
-* **Inference Service:** FastAPI (Python)  
-* **Database:** PostgreSQL  
-* **Producer:** Python  
-* **Training:** Jupyter Notebook (nbconvert)
+## Technology Stack
 
-## **⚡ How to Run the Pipeline**
+- **ML Model:** HuggingFace DistilBERT (`distilbert-base-uncased-finetuned-sst-2-english`) via PyTorch
+- **Inference Service:** FastAPI with async Kafka consumer
+- **Streaming:** Apache Kafka
+- **Model Registry:** MLflow 2.9.2
+- **Data Versioning:** DVC + MinIO
+- **Database:** PostgreSQL 14
+- **Dashboard:** Streamlit
+- **Drift Detection:** Evidently AI
+- **Monitoring:** Prometheus + Grafana + cAdvisor
+- **CI/CD:** GitHub Actions
+- **Orchestration:** Docker Compose
 
-This pipeline has a two-phase setup:
+## Quick Start
 
-1. **Phase 1: Start Infrastructure:** Run all services. The model\_service will intentionally fail and restart because no model exists yet.  
-2. **Phase 2: Train & Deploy Model:** Run the training script to train a model and register it in MLflow, which "unlocks" the model\_service.
+### Prerequisites
 
-### **Prerequisites**
+- Docker & Docker Compose
+- Git
 
-Before you begin, ensure your requirements.txt file (used by Dockerfile) includes the correct mlflow version to match the server and the nbconvert package for running the training script.
+### 1. Configure Environment
 
-### **requirements.txt**
+```bash
+cp .env.example .env
+# Edit .env with your desired credentials (defaults work for local dev)
+```
 
-mlflow==2.9.2  
-nbconvert
+### 2. Start All Services
 
-### **... other packages like fastapi, pandas, aiokafka, etc.**
+```bash
+docker-compose up -d --build
+```
 
-### Phase 1: Start All Services
+The `model_service` will restart until a model is trained. This is expected.
 
-1\.  Build and start all services in detached mode:  
-    \`\`\`bash  
-    docker-compose up \-d \--build  
-    \`\`\`
+### 3. Train & Deploy the First Model
 
-2\.  At this point, the \`model\_service\` will be in a crash loop. You can see this by running \`docker-compose logs \-f model\_service\`. It will show an error like \`Registered model alias champion not found\`. \*\*This is expected.\*\*
+```bash
+# Exec into the producer container
+docker-compose exec -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash
 
-### Phase 2: Train and Deploy the First Model
+# Inside the container:
+jupyter nbconvert --to script src/notebooks/01_model_training.ipynb
+python src/notebooks/01_model_training.py
+exit
+```
 
-You must now run the training script \*inside\* one of the running containers to register the first model.
+The `model_service` will automatically pick up the "champion" model on its next retry.
 
-1\.  Open a new terminal and "exec" into the \`producer\` container. We pass the \`MLFLOW\_TRACKING\_URI\` environment variable so the script knows where to find the MLflow server.  
-    \`\`\`bash  
-    docker-compose exec \-e MLFLOW\_TRACKING\_URI=<http://mlflow\_server:5000> producer /bin/bash  
-    \`\`\`
+### 4. Verify It's Working
 
-2\.  Inside the container, convert the Jupyter Notebook to a Python script:  
-    \`\`\`bash  
-    jupyter nbconvert \--to script src/notebooks/01\_model\_training.ipynb  
-    \`\`\`
+```bash
+# Check model service logs
+docker-compose logs -f model_service
 
-3\.  Run the Python script to train and register the model:  
-    \`\`\`bash  
-    python src/notebooks/01\_model\_training.py  
-    \`\`\`  
-    You will see output as the script trains, logs metrics, and finally registers the model with the "champion" alias.
+# Test the prediction endpoint
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text": "I love this product!"}'
 
-\---
+# Check the database
+docker-compose exec postgres_db psql -U gigaflow -d sentiment_db \
+  -c "SELECT text, sentiment_label, processed_at FROM sentiment_predictions ORDER BY processed_at DESC LIMIT 10;"
+```
 
-## ✅ Verify It's Working
+## Accessing Services
 
-Once the training script is finished, the \`model\_service\` (on its next automatic restart) will successfully download the "champion" model and begin processing messages.
+| Service | URL |
+|---------|-----|
+| Model Service API | http://localhost:8000 |
+| Model Service Health | http://localhost:8000/health |
+| MLflow UI | http://localhost:5000 |
+| Streamlit Dashboard | http://localhost:8501 |
+| Grafana Dashboards | http://localhost:3000 (admin/admin) |
+| Prometheus | http://localhost:9090 |
+| MinIO Console | http://localhost:9001 |
 
-### 1\. Check the Service Logs
+## Monitoring
 
-Check the logs for the \`model\_service\`:  
-\`\`\`bash  
-docker-compose logs \-f model\_service
+### Grafana
 
-You should now see new logs appearing every few seconds, like:
+Pre-provisioned dashboards are available at http://localhost:3000:
 
-Model giga-flow-sentiment (Alias: champion) loaded successfully.  
-Starting Kafka consumer...  
-Kafka consumer connected successfully.  
-...  
-Received message: {'text': "I'm so frustrated with this app.", ...}  
-Prediction: 'I'm so frustrated with this app.' \-\> Negative  
-Prediction saved to database.
+- **GigaFlow MLOps Overview** — Request rate, latency, drift score, Kafka lag, container resources
 
-### **2\. Check the Database**
+### Prometheus Alerts
 
-1. Connect to the PostgreSQL database:  
-   docker-compose exec postgres\_db psql \-U gigaflow \-d sentiment\_db
+Alert rules are configured for:
+- Data drift detected (5min sustained)
+- Model service down (1min)
+- High error rate (>5% 5xx responses)
+- Kafka consumer lag > 1000
+- Drift monitor unreachable
 
-2. Run a SQL query to see the predictions being saved:  
-   SELECT text, sentiment\_label, processed\_at  
-   FROM sentiment\_predictions  
-   ORDER BY processed\_at DESC  
-   LIMIT 10;
+View active alerts at http://localhost:9090/alerts.
 
-3. Type \\q to exit psql and exit to leave the container.
+### Drift Detection
 
-## **🔄 Deploying a New Model (The MLOps Loop)**
+The drift monitor compares live Kafka messages against the training data using Evidently AI. Metrics are exposed at `:8001/metrics` and scraped by Prometheus.
 
-Now that the pipeline is running, deploying an improved model is simple:
+## CI/CD
 
-1. Make your changes to the 01\_model\_training.ipynb notebook (e.g., add more data, use a better model).  
-2. Repeat **Phase 2** (exec into the container, convert, and run the script). The script will register a new model version and update the "champion" alias to point to it.  
-3. Restart the model\_service to force it to load the new model immediately:  
-   docker-compose restart model\_service  
+### GitHub Actions Workflows
+
+- **ci.yml** — Triggered on pull requests. Starts all services, runs CI-mode training (10k samples), executes pytest suite.
+- **training.yml** — Manual trigger. Runs full training, promotes model if accuracy improves, restarts model_service.
+
+### Model Promotion
+
+The promotion script (`scripts/promote_model.py`) compares the new model's accuracy against the current champion. Promotion only happens if the new model is better.
+
+## Data Versioning (DVC)
+
+The IMDB dataset is tracked with DVC and stored in MinIO:
+
+```bash
+# Pull data
+dvc pull
+
+# Reproduce the training pipeline
+dvc repro
+```
+
+Pipeline stages are defined in `dvc.yaml` with parameters in `params.yaml`.
+
+## Deploying a New Model
+
+1. Modify the training notebook or parameters
+2. Re-run training (Phase 2 steps above, or trigger the `training.yml` workflow)
+3. The promotion script automatically compares accuracy and promotes if better
+4. Restart model_service to load the new champion:
+   ```bash
+   docker-compose restart model_service
+   ```
+
+## Development
+
+```bash
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests (requires services running)
+pytest tests/ --model-service-url=http://localhost:8000 --mlflow-tracking-uri=http://localhost:5000
+
+# Install pre-commit hooks
+pre-commit install
+```
+
+## Project Structure
+
+```
+giga-flow-mlops/
+├── src/
+│   ├── model_service/main.py      # FastAPI inference + Kafka consumer
+│   ├── producer/producer.py        # Kafka data producer
+│   ├── drift_monitor/monitor.py    # Evidently drift detection
+│   ├── dashboard/app.py            # Streamlit UI
+│   └── notebooks/                  # Training notebook
+├── scripts/promote_model.py        # Model promotion logic
+├── tests/                          # Pytest suite
+├── grafana/                        # Dashboard provisioning
+├── prometheus/                     # Prometheus config & alerts
+├── postgres/                       # DB initialization
+├── data/                           # DVC-tracked datasets
+├── docker-compose.yml              # Production orchestration
+├── docker-compose.ci.yml           # CI port overrides
+├── Dockerfile                      # Multi-stage app build
+├── mlflow.Dockerfile               # MLflow server
+├── dashboard.Dockerfile            # Streamlit dashboard
+├── dvc.yaml                        # DVC pipeline stages
+├── params.yaml                     # Training parameters
+├── requirements.txt                # Python dependencies (pinned)
+├── requirements-inference.txt      # Inference-only dependencies
+└── .pre-commit-config.yaml         # Code quality hooks
+```
