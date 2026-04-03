@@ -3,6 +3,10 @@ name: Model Training & Promotion
 on:
   workflow_dispatch:
 
+concurrency:
+  group: training
+  cancel-in-progress: false
+
 jobs:
   train-and-promote:
     runs-on: self-hosted
