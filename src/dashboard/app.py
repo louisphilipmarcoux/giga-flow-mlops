@@ -220,11 +220,9 @@ with tab_predict:
 
     # Quick example buttons
     st.caption("Try an example:")
-    example_cols = st.columns(len(LANGUAGE_EXAMPLES[language]))
     for i, example in enumerate(LANGUAGE_EXAMPLES[language]):
-        with example_cols[i]:
-            if st.button(example[:30] + "...", key=f"ex_{language}_{i}"):
-                user_text = example
+        if st.button(example, key=f"ex_{language}_{i}"):
+            user_text = example
 
     if st.button("🔍 Analyze", type="primary") or user_text:
         if user_text:
