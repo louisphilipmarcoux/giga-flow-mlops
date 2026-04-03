@@ -1,4 +1,3 @@
-import json
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -6,32 +5,32 @@ from unittest.mock import MagicMock, patch
 def test_message_format():
     """Verify that produced messages have the expected schema."""
     # Patch KafkaProducer before importing the module (it connects at import time)
-    with patch.dict("sys.modules", {}):
-        with patch("kafka.KafkaProducer") as MockProducer:
-            mock_instance = MagicMock()
-            MockProducer.return_value = mock_instance
+    with patch.dict("sys.modules", {}), patch("kafka.KafkaProducer") as MockProducer:
+        mock_instance = MagicMock()
+        MockProducer.return_value = mock_instance
 
-            # Remove cached module to force re-import with patch
-            sys.modules.pop("src.producer.producer", None)
+        # Remove cached module to force re-import with patch
+        sys.modules.pop("src.producer.producer", None)
 
-            from src.producer.producer import send_message, TOPIC_NAME
-            # Replace the module-level producer with our mock
-            import src.producer.producer as producer_mod
-            producer_mod.producer = mock_instance
+        # Replace the module-level producer with our mock
+        import src.producer.producer as producer_mod
+        from src.producer.producer import send_message
 
-            send_message()
+        producer_mod.producer = mock_instance
 
-            mock_instance.send.assert_called_once()
-            call_args = mock_instance.send.call_args
-            topic = call_args[0][0]
-            message = call_args[1]["value"]
+        send_message()
 
-            assert topic == "giga-flow-messages"
-            assert "text" in message
-            assert "timestamp" in message
-            assert isinstance(message["text"], str)
-            assert isinstance(message["timestamp"], float)
-            assert len(message["text"]) > 0
+        mock_instance.send.assert_called_once()
+        call_args = mock_instance.send.call_args
+        topic = call_args[0][0]
+        message = call_args[1]["value"]
+
+        assert topic == "giga-flow-messages"
+        assert "text" in message
+        assert "timestamp" in message
+        assert isinstance(message["text"], str)
+        assert isinstance(message["timestamp"], float)
+        assert len(message["text"]) > 0
 
 
 def test_dummy_data_variety():

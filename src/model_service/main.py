@@ -1,20 +1,22 @@
 import asyncio
+import datetime
 import json
 import logging
-import pandas as pd
-import datetime
 import os
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, field_validator
-from aiokafka import AIOKafkaConsumer
-import sqlalchemy
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy import Column, Integer, String, Float, DateTime
-from starlette_prometheus import PrometheusMiddleware, metrics
-from prometheus_client import Histogram, Counter
 import time as _time
+from contextlib import asynccontextmanager
+
+import mlflow
+import pandas as pd
+import sqlalchemy
+from aiokafka import AIOKafkaConsumer
+from fastapi import FastAPI, HTTPException
+from prometheus_client import Counter, Histogram
+from pydantic import BaseModel, field_validator
+from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+from starlette_prometheus import PrometheusMiddleware, metrics
 
 logger = logging.getLogger("model_service")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -22,13 +24,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 # --- Custom Prometheus Metrics ---
 PREDICTION_LATENCY = Histogram("prediction_latency_seconds", "Prediction inference latency in seconds")
 PREDICTION_INPUT_LENGTH = Histogram(
-    "prediction_input_length_chars", "Input text length in characters",
-    buckets=[10, 50, 100, 200, 500, 1000, 2000, 5000]
+    "prediction_input_length_chars",
+    "Input text length in characters",
+    buckets=[10, 50, 100, 200, 500, 1000, 2000, 5000],
 )
 PREDICTIONS_TOTAL = Counter("predictions_total", "Total predictions made", ["sentiment"])
 
 # --- Pydantic Models ---
 MAX_TEXT_LENGTH = 10_000
+
 
 class PredictionRequest(BaseModel):
     text: str
@@ -43,9 +47,11 @@ class PredictionRequest(BaseModel):
             raise ValueError(f"text must not exceed {MAX_TEXT_LENGTH} characters")
         return v
 
+
 class KafkaMessage(BaseModel):
     text: str
     timestamp: float
+
 
 # --- Configuration ---
 KAFKA_TOPIC = "giga-flow-messages"
@@ -56,14 +62,11 @@ MLFLOW_MODEL_ALIAS = "champion"
 # Load from environment variable, with our local DB as a fallback
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://gigaflow:password@localhost:5432/sentiment_db")
 
-import mlflow
-
 # --- SQLAlchemy Setup ---
 engine = create_async_engine(DATABASE_URL, echo=False, pool_size=10, max_overflow=20, pool_pre_ping=True)
 Base = declarative_base()
-AsyncSessionLocal = sessionmaker(
-    bind=engine, class_=AsyncSession, expire_on_commit=False
-)
+AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
 
 # --- Define Predictions Table (ORM Model) ---
 class SentimentPrediction(Base):
@@ -73,16 +76,19 @@ class SentimentPrediction(Base):
     sentiment_score = Column(Float)
     sentiment_label = Column(String)
     message_timestamp = Column(DateTime)
-    processed_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    processed_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
+
 
 # --- Model & Consumer Globals ---
 model = None
 kafka_consumer_task = None
 
+
 async def create_db_and_tables():
     """Create the table in the database."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -124,11 +130,13 @@ async def lifespan(app):
         except asyncio.CancelledError:
             logger.info("Kafka consumer task cancelled.")
 
+
 # --- FastAPI App ---
 app = FastAPI(title="GigaFlow Model Service", lifespan=lifespan)
 
 app.add_middleware(PrometheusMiddleware)
 app.add_route("/metrics", metrics)
+
 
 # --- Health Check Endpoint ---
 @app.get("/health")
@@ -155,6 +163,7 @@ async def health_check():
         raise HTTPException(status_code=503, detail=status)
     return status
 
+
 # --- Prediction Endpoint ---
 @app.post("/predict")
 async def predict(request: PredictionRequest):
@@ -165,27 +174,25 @@ async def predict(request: PredictionRequest):
 
     try:
         PREDICTION_INPUT_LENGTH.observe(len(request.text))
-        data_df = pd.DataFrame({'text': [request.text]})
+        data_df = pd.DataFrame({"text": [request.text]})
 
         start = _time.perf_counter()
         prediction = model.predict(data_df)
         PREDICTION_LATENCY.observe(_time.perf_counter() - start)
 
         sentiment_score = float(prediction[0])
-        sentiment_label = 'Positive' if sentiment_score == 1.0 else 'Negative'
+        sentiment_label = "Positive" if sentiment_score == 1.0 else "Negative"
         PREDICTIONS_TOTAL.labels(sentiment=sentiment_label).inc()
 
-        return {
-            "text": request.text,
-            "sentiment_label": sentiment_label,
-            "sentiment_score": sentiment_score
-        }
+        return {"text": request.text, "sentiment_label": sentiment_label, "sentiment_score": sentiment_score}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}") from e
+
 
 # --- Kafka Consumer Logic ---
 BATCH_SIZE = 16
 BATCH_TIMEOUT = 0.5  # seconds
+
 
 async def consume_messages():
     """
@@ -201,8 +208,8 @@ async def consume_messages():
             consumer = AIOKafkaConsumer(
                 KAFKA_TOPIC,
                 bootstrap_servers=KAFKA_SERVER,
-                value_deserializer=lambda v: json.loads(v.decode('utf-8')),
-                group_id="aiokafka-consumer"
+                value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+                group_id="aiokafka-consumer",
             )
             await consumer.start()
             logger.info("Kafka consumer connected successfully.")
@@ -233,7 +240,7 @@ async def consume_messages():
 
         # Batch prediction
         texts = [msg.text for msg in current_batch]
-        data_df = pd.DataFrame({'text': texts})
+        data_df = pd.DataFrame({"text": texts})
 
         start = _time.perf_counter()
         predictions = model.predict(data_df)
@@ -242,25 +249,24 @@ async def consume_messages():
 
         # Build DB records
         records = []
-        for kafka_msg, pred in zip(current_batch, predictions):
+        for kafka_msg, pred in zip(current_batch, predictions, strict=True):
             sentiment_score = float(pred)
-            sentiment_label = 'Positive' if sentiment_score == 1.0 else 'Negative'
+            sentiment_label = "Positive" if sentiment_score == 1.0 else "Negative"
             PREDICTIONS_TOTAL.labels(sentiment=sentiment_label).inc()
             PREDICTION_INPUT_LENGTH.observe(len(kafka_msg.text))
 
-            records.append(SentimentPrediction(
-                text=kafka_msg.text,
-                sentiment_score=sentiment_score,
-                sentiment_label=sentiment_label,
-                message_timestamp=datetime.datetime.fromtimestamp(
-                    kafka_msg.timestamp, tz=datetime.timezone.utc
+            records.append(
+                SentimentPrediction(
+                    text=kafka_msg.text,
+                    sentiment_score=sentiment_score,
+                    sentiment_label=sentiment_label,
+                    message_timestamp=datetime.datetime.fromtimestamp(kafka_msg.timestamp, tz=datetime.UTC),
                 )
-            ))
+            )
 
         # Batch insert to DB
-        async with AsyncSessionLocal() as session:
-            async with session.begin():
-                session.add_all(records)
+        async with AsyncSessionLocal() as session, session.begin():
+            session.add_all(records)
 
         logger.info(f"Batch of {len(records)} predictions saved to database in {latency:.3f}s.")
 

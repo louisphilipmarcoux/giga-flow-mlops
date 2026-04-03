@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
-from src.model_service.main import KafkaMessage, PredictionRequest, MAX_TEXT_LENGTH
+
+from src.model_service.main import MAX_TEXT_LENGTH, KafkaMessage, PredictionRequest
 
 
 def test_valid_kafka_message():
@@ -41,6 +42,7 @@ def test_extra_fields_ignored():
 
 
 # --- PredictionRequest validation tests ---
+
 
 def test_prediction_request_valid():
     """Test valid prediction request."""

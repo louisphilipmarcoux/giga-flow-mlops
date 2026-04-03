@@ -1,8 +1,9 @@
-import time
 import json
 import logging
-import random
 import os
+import random
+import time
+
 from kafka import KafkaProducer
 
 logger = logging.getLogger("producer")
@@ -40,8 +41,8 @@ def init_producer():
             logger.info(f"Attempting to connect to Kafka at {KAFKA_SERVER}...")
             producer = KafkaProducer(
                 bootstrap_servers=KAFKA_SERVER,
-                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-                compression_type='lz4'
+                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+                compression_type="lz4",
             )
             logger.info("Kafka producer connected successfully.")
             return producer
@@ -50,19 +51,19 @@ def init_producer():
             time.sleep(delay)
             delay = min(delay * 2, 60)
 
+
 # Initialize Kafka Producer with retries
 producer = init_producer()
 
+
 def send_message():
     """Simulates sending a single message to the Kafka topic."""
-    message = {
-        'text': random.choice(dummy_data),
-        'timestamp': time.time()
-    }
+    message = {"text": random.choice(dummy_data), "timestamp": time.time()}
 
     logger.info(f"Sending message: {message}")
     producer.send(TOPIC_NAME, value=message)
     producer.flush()
+
 
 if __name__ == "__main__":
     logger.info("Starting data producer...")

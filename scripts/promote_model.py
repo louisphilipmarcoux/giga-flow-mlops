@@ -1,10 +1,12 @@
 import os
 import sys
+
 from mlflow.tracking import MlflowClient
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5000")
 MODEL_NAME = "giga-flow-sentiment"
 CHAMPION_ALIAS = "champion"
+
 
 def promote_model(new_run_id):
     """
@@ -17,7 +19,7 @@ def promote_model(new_run_id):
 
     client = MlflowClient(tracking_uri=MLFLOW_TRACKING_URI)
     print(f"Connecting to MLflow at {MLFLOW_TRACKING_URI}...")
-    
+
     # Get new model's metrics
     try:
         new_run = client.get_run(new_run_id)
@@ -45,14 +47,11 @@ def promote_model(new_run_id):
     # The promotion logic
     if new_accuracy > current_champion_accuracy:
         print(f"New model is better. Setting '{CHAMPION_ALIAS}' alias to Version {new_version.version}...")
-        client.set_registered_model_alias(
-            name=MODEL_NAME,
-            alias=CHAMPION_ALIAS,
-            version=new_version.version
-        )
+        client.set_registered_model_alias(name=MODEL_NAME, alias=CHAMPION_ALIAS, version=new_version.version)
         print("Promotion successful.")
     else:
         print("New model is not better than the current champion. No promotion.")
+
 
 if __name__ == "__main__":
     run_id_from_env = os.getenv("NEW_RUN_ID")

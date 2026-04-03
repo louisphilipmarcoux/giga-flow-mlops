@@ -2,13 +2,14 @@ import asyncio
 import json
 import logging
 import os
-import pandas as pd
+
 import mlflow
-from aiokafka import AIOKafkaConsumer
-from evidently.report import Report
-from evidently.metrics import ColumnDriftMetric
+import pandas as pd
 from aiohttp import web
-from prometheus_client import Gauge, REGISTRY
+from aiokafka import AIOKafkaConsumer
+from evidently.metrics import ColumnDriftMetric
+from evidently.report import Report
+from prometheus_client import REGISTRY, Gauge
 
 logger = logging.getLogger("drift_monitor")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -33,6 +34,7 @@ reference_data = None
 live_data_batch = []
 client = mlflow.tracking.MlflowClient(tracking_uri=MLFLOW_TRACKING_URI)
 
+
 async def load_reference_data():
     """
     Downloads the 'training_data.parquet' artifact from the
@@ -49,14 +51,12 @@ async def load_reference_data():
             logger.info(f"Found champion model: Version {version.version}, Run ID {version.run_id}")
 
             local_path = client.download_artifacts(
-                run_id=version.run_id,
-                path="reference_data/training_data.parquet",
-                dst_path="."
+                run_id=version.run_id, path="reference_data/training_data.parquet", dst_path="."
             )
             logger.info(f"Reference data artifact downloaded to {local_path}")
 
             reference_data = pd.read_parquet(local_path)
-            reference_data = reference_data[['text']]
+            reference_data = reference_data[["text"]]
             logger.info(f"Reference data loaded: {len(reference_data)} rows.")
             break
 
@@ -69,6 +69,7 @@ async def load_reference_data():
             await asyncio.sleep(delay)
             delay = min(delay * 2, 60)
 
+
 async def run_drift_check(live_batch_df):
     """
     Runs an Evidently AI drift report comparing the live
@@ -80,14 +81,14 @@ async def run_drift_check(live_batch_df):
 
     logger.info(f"Running drift check on {len(live_batch_df)} new records...")
     try:
-        data_drift_report = Report(metrics=[ColumnDriftMetric(column_name='text')])
+        data_drift_report = Report(metrics=[ColumnDriftMetric(column_name="text")])
         data_drift_report.run(current_data=live_batch_df, reference_data=reference_data, column_mapping=None)
 
         report_dict = data_drift_report.as_dict()
 
-        drift_info = report_dict['metrics'][0]['result']
-        p_value = drift_info.get('drift_score', 0.0)
-        drift_detected = drift_info.get('drift_detected', False)
+        drift_info = report_dict["metrics"][0]["result"]
+        p_value = drift_info.get("drift_score", 0.0)
+        drift_detected = drift_info.get("drift_detected", False)
         score = 1.0 if drift_detected else 0.0
 
         logger.info(f"Drift Check Complete: p-value={p_value:.4f}, Drift Detected={drift_detected}")
@@ -97,6 +98,7 @@ async def run_drift_check(live_batch_df):
 
     except Exception as e:
         logger.error(f"Error during drift check: {e}")
+
 
 async def kafka_consumer():
     """Consumes messages from Kafka and runs drift checks."""
@@ -110,8 +112,8 @@ async def kafka_consumer():
             consumer = AIOKafkaConsumer(
                 KAFKA_TOPIC,
                 bootstrap_servers=KAFKA_SERVER,
-                value_deserializer=lambda v: json.loads(v.decode('utf-8')),
-                group_id="drift_monitor_group"
+                value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+                group_id="drift_monitor_group",
             )
             await consumer.start()
             logger.info("Kafka Consumer connected.")
@@ -122,15 +124,16 @@ async def kafka_consumer():
 
     try:
         async for msg in consumer:
-            text = msg.value.get('text')
+            text = msg.value.get("text")
             if text:
-                live_data_batch.append({'text': text})
+                live_data_batch.append({"text": text})
 
             if len(live_data_batch) >= BATCH_SIZE:
                 asyncio.create_task(run_drift_check(pd.DataFrame(live_data_batch)))
                 live_data_batch = []
     finally:
         await consumer.stop()
+
 
 async def start_metrics_server():
     """Starts the Prometheus HTTP server."""
@@ -139,6 +142,7 @@ async def start_metrics_server():
 
     async def handle_metrics(request):
         from prometheus_client import generate_latest
+
         resp = web.Response(body=generate_latest(REGISTRY))
         resp.content_type = "text/plain"
         return resp
@@ -146,7 +150,7 @@ async def start_metrics_server():
     app.router.add_get("/metrics", handle_metrics)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', METRICS_PORT)
+    site = web.TCPSite(runner, "0.0.0.0", METRICS_PORT)
     await site.start()
     logger.info(f"Metrics server running on http://0.0.0.0:{METRICS_PORT}")
 
@@ -158,6 +162,7 @@ async def main():
     metrics_task = asyncio.create_task(start_metrics_server())
 
     await asyncio.gather(consumer_task, metrics_task)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

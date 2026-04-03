@@ -1,31 +1,41 @@
-import pytest
-import pandas as pd
-from unittest.mock import MagicMock, patch, AsyncMock
 import asyncio
+
+import pandas as pd
+import pytest
 
 
 @pytest.fixture
 def reference_df():
     """Sample reference data for testing."""
-    return pd.DataFrame({"text": [
-        "I love this product",
-        "Terrible experience",
-        "Amazing quality",
-        "Would not recommend",
-        "Best purchase ever",
-    ] * 20})  # 100 rows
+    return pd.DataFrame(
+        {
+            "text": [
+                "I love this product",
+                "Terrible experience",
+                "Amazing quality",
+                "Would not recommend",
+                "Best purchase ever",
+            ]
+            * 20
+        }
+    )  # 100 rows
 
 
 @pytest.fixture
 def live_batch_df():
     """Sample live batch data for testing."""
-    return pd.DataFrame({"text": [
-        "Great service overall",
-        "Very disappointed",
-        "Highly recommend this",
-        "Awful customer support",
-        "Exceeded my expectations",
-    ] * 20})  # 100 rows
+    return pd.DataFrame(
+        {
+            "text": [
+                "Great service overall",
+                "Very disappointed",
+                "Highly recommend this",
+                "Awful customer support",
+                "Exceeded my expectations",
+            ]
+            * 20
+        }
+    )  # 100 rows
 
 
 def test_drift_check_runs_without_error(reference_df, live_batch_df):
@@ -62,5 +72,6 @@ def test_drift_check_skips_when_no_reference():
 def test_batch_size_config():
     """Test that batch size is correctly configured."""
     from src.drift_monitor.monitor import BATCH_SIZE
+
     assert BATCH_SIZE == 100
     assert isinstance(BATCH_SIZE, int)
