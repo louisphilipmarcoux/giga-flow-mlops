@@ -1,36 +1,70 @@
-# Giga-Flow MLOps
+<p align="center">
+  <h1 align="center">Giga-Flow MLOps</h1>
+  <p align="center">
+    A production-grade, end-to-end MLOps pipeline for real-time sentiment analysis.<br/>
+    From data streaming to model serving, monitoring, and automated retraining — all containerized.
+  </p>
+</p>
 
-[![CI](https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
-[![MLflow 2.9](https://img.shields.io/badge/MLflow-2.9-blue.svg)](https://mlflow.org)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
+<p align="center">
+  <a href="https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/ci.yml"><img src="https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/lint.yml"><img src="https://github.com/Louis-Philip/giga-flow-mlops/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.11-3776AB.svg?logo=python&logoColor=white" alt="Python 3.11"></a>
+  <a href="https://mlflow.org"><img src="https://img.shields.io/badge/MLflow-2.9-0194E2.svg?logo=mlflow&logoColor=white" alt="MLflow"></a>
+  <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white" alt="Docker"></a>
+</p>
 
-A production-ready, end-to-end MLOps pipeline for **real-time sentiment analysis** using HuggingFace DistilBERT, Kafka streaming, MLflow model registry, and comprehensive monitoring.
+<p align="center">
+  <img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/Apache_Kafka-231F20?logo=apachekafka&logoColor=white" alt="Kafka">
+  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white" alt="PyTorch">
+  <img src="https://img.shields.io/badge/HuggingFace-FFD21E?logo=huggingface&logoColor=black" alt="HuggingFace">
+  <img src="https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white" alt="Prometheus">
+  <img src="https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white" alt="Grafana">
+  <img src="https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit">
+  <img src="https://img.shields.io/badge/DVC-13ADC7?logo=dvc&logoColor=white" alt="DVC">
+</p>
+
+---
+
+## What is this?
+
+GigaFlow is a **complete MLOps platform** that demonstrates how to build, deploy, monitor, and continuously improve a machine learning model in production. It processes a live stream of text messages through Apache Kafka, runs real-time sentiment analysis using a HuggingFace DistilBERT transformer, stores predictions in PostgreSQL, and monitors for data drift — all orchestrated with Docker Compose.
+
+This isn't a toy example. It implements the patterns you'd find in a real production ML system:
+
+- **Streaming inference** with async Kafka consumers and batch prediction
+- **Model versioning & promotion** with MLflow's champion/challenger pattern
+- **Data drift detection** with Evidently AI and Prometheus alerting
+- **Full observability** with custom metrics, pre-built Grafana dashboards, and alert rules
+- **Reproducible pipelines** with DVC data versioning and parameterized training
+- **CI/CD** with GitHub Actions for automated testing and one-click retraining
 
 ## Features
 
-- **Real-time inference** -- FastAPI service consuming from Kafka with batch prediction optimization
-- **Model registry** -- MLflow with automated champion promotion based on accuracy comparison
-- **Data versioning** -- DVC + MinIO for reproducible datasets and training pipelines
-- **Drift detection** -- Evidently AI monitors live data drift with Prometheus alerting
-- **Live dashboard** -- Streamlit UI for testing predictions and viewing sentiment distribution
-- **Full observability** -- Prometheus metrics, Grafana dashboards, custom prediction latency histograms
-- **CI/CD** -- GitHub Actions for automated testing and manual model training/promotion
-- **Container orchestration** -- 13 Docker services with health checks, restart policies, and resource limits
+- **Real-time inference** — FastAPI service consuming from Kafka with batch prediction optimization
+- **Model registry** — MLflow with automated champion promotion based on accuracy comparison
+- **Data versioning** — DVC + MinIO for reproducible datasets and training pipelines
+- **Drift detection** — Evidently AI monitors live data drift with Prometheus alerting
+- **Live dashboard** — Streamlit UI for testing predictions and viewing sentiment distribution
+- **Full observability** — Prometheus metrics, Grafana dashboards, custom prediction latency histograms
+- **CI/CD** — GitHub Actions for automated testing and manual model training/promotion
+- **Production-hardened** — Health checks, restart policies, resource limits, input validation, structured logging
 
 ## Architecture
 
 ```
                     +------------------+
                     |    Producer      |
-                    | (dummy data)     |
+                    | (simulated data) |
                     +--------+---------+
                              |
                              v
                     +------------------+
                     |     Kafka        |
-                    | (streaming)      |
+                    |  (streaming)     |
                     +--------+---------+
                              |
               +--------------+--------------+
@@ -53,7 +87,7 @@ A production-ready, end-to-end MLOps pipeline for **real-time sentiment analysis
 
     +------------------+          +------------------+
     |   MLflow Server  |          |     MinIO        |
-    |   (registry)     +--------->|   (artifacts)    |
+    |   (registry)     +--------->|   (S3 storage)   |
     +------------------+          +------------------+
 ```
 
@@ -74,19 +108,21 @@ A production-ready, end-to-end MLOps pipeline for **real-time sentiment analysis
 | **kafka_exporter** | Kafka metrics for Prometheus | 9308 |
 | **cadvisor** | Container resource monitoring | 8080 |
 
-## Technology Stack
+## Tech Stack
 
-- **ML Model:** HuggingFace DistilBERT (`distilbert-base-uncased-finetuned-sst-2-english`) via PyTorch
-- **Inference Service:** FastAPI with async Kafka consumer
-- **Streaming:** Apache Kafka
-- **Model Registry:** MLflow 2.9.2
-- **Data Versioning:** DVC + MinIO
-- **Database:** PostgreSQL 14
-- **Dashboard:** Streamlit
-- **Drift Detection:** Evidently AI
-- **Monitoring:** Prometheus + Grafana + cAdvisor
-- **CI/CD:** GitHub Actions
-- **Orchestration:** Docker Compose
+| Category | Technology |
+|----------|------------|
+| **ML Model** | HuggingFace DistilBERT via PyTorch |
+| **Inference** | FastAPI + async Kafka consumer |
+| **Streaming** | Apache Kafka |
+| **Model Registry** | MLflow 2.9 |
+| **Data Versioning** | DVC + MinIO |
+| **Database** | PostgreSQL 14 |
+| **Dashboard** | Streamlit |
+| **Drift Detection** | Evidently AI |
+| **Monitoring** | Prometheus + Grafana + cAdvisor |
+| **CI/CD** | GitHub Actions |
+| **Orchestration** | Docker Compose (13 services) |
 
 ## Quick Start
 
@@ -106,6 +142,7 @@ cp .env.example .env
 
 ```bash
 docker-compose up -d --build
+# Or use: make up
 ```
 
 The `model_service` will restart until a model is trained. This is expected.
@@ -113,10 +150,11 @@ The `model_service` will restart until a model is trained. This is expected.
 ### 3. Train & Deploy the First Model
 
 ```bash
-# Exec into the producer container
-docker-compose exec -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash
+# Using Makefile
+make train
 
-# Inside the container:
+# Or manually
+docker-compose exec -e MLFLOW_TRACKING_URI=http://mlflow_server:5000 producer /bin/bash
 jupyter nbconvert --to script src/notebooks/01_model_training.ipynb
 python src/notebooks/01_model_training.py
 exit
@@ -128,7 +166,7 @@ The `model_service` will automatically pick up the "champion" model on its next 
 
 ```bash
 # Check model service logs
-docker-compose logs -f model_service
+make logs-model
 
 # Test the prediction endpoint
 curl -X POST http://localhost:8000/predict \
@@ -144,66 +182,67 @@ docker-compose exec postgres_db psql -U gigaflow -d sentiment_db \
 
 | Service | URL |
 |---------|-----|
-| Model Service API | http://localhost:8000 |
-| Model Service Health | http://localhost:8000/health |
-| MLflow UI | http://localhost:5000 |
-| Streamlit Dashboard | http://localhost:8501 |
-| Grafana Dashboards | http://localhost:3000 (admin/admin) |
-| Prometheus | http://localhost:9090 |
-| MinIO Console | http://localhost:9001 |
+| Model Service API | `http://localhost:8000` |
+| Model Service Health | `http://localhost:8000/health` |
+| MLflow UI | `http://localhost:5000` |
+| Streamlit Dashboard | `http://localhost:8501` |
+| Grafana Dashboards | `http://localhost:3000` (admin/admin) |
+| Prometheus | `http://localhost:9090` |
+| MinIO Console | `http://localhost:9001` |
 
 ## Monitoring
 
 ### Grafana
 
-Pre-provisioned dashboards are available at http://localhost:3000:
+Pre-provisioned dashboards are available at `http://localhost:3000`:
 
-- **GigaFlow MLOps Overview** — Request rate, latency, drift score, Kafka lag, container resources
+- **GigaFlow MLOps Overview** — Request rate, latency (p95), drift score, Kafka consumer lag, container CPU/memory
 
 ### Prometheus Alerts
 
 Alert rules are configured for:
+
 - Data drift detected (5min sustained)
 - Model service down (1min)
 - High error rate (>5% 5xx responses)
 - Kafka consumer lag > 1000
 - Drift monitor unreachable
 
-View active alerts at http://localhost:9090/alerts.
+View active alerts at `http://localhost:9090/alerts`.
 
 ### Drift Detection
 
-The drift monitor compares live Kafka messages against the training data using Evidently AI. Metrics are exposed at `:8001/metrics` and scraped by Prometheus.
+The drift monitor consumes the same Kafka stream, batches messages (100 per check), and compares against the champion model's training data using Evidently AI. Drift metrics are exposed via Prometheus and visualized in Grafana.
 
 ## CI/CD
 
 ### GitHub Actions Workflows
 
-- **ci.yml** — Triggered on pull requests. Starts all services, runs CI-mode training (10k samples), executes pytest suite.
-- **training.yml** — Manual trigger. Runs full training, promotes model if accuracy improves, restarts model_service.
+| Workflow | Trigger | Description |
+|----------|---------|-------------|
+| **CI** | Pull request | Starts all services, runs CI-mode training (10k samples), executes pytest |
+| **Lint** | Push / PR | Runs ruff linter and formatter checks |
+| **Training** | Manual | Full training, smart promotion, model_service restart |
 
 ### Model Promotion
 
-The promotion script (`scripts/promote_model.py`) compares the new model's accuracy against the current champion. Promotion only happens if the new model is better.
+The promotion script (`scripts/promote_model.py`) compares the new model's accuracy against the current champion. Promotion only happens if the new model is better — no manual intervention needed.
 
 ## Data Versioning (DVC)
 
 The IMDB dataset is tracked with DVC and stored in MinIO:
 
 ```bash
-# Pull data
-dvc pull
-
-# Reproduce the training pipeline
-dvc repro
+dvc pull          # Pull data
+dvc repro         # Reproduce the training pipeline
 ```
 
 Pipeline stages are defined in `dvc.yaml` with parameters in `params.yaml`.
 
 ## Deploying a New Model
 
-1. Modify the training notebook or parameters
-2. Re-run training (Phase 2 steps above, or trigger the `training.yml` workflow)
+1. Modify the training notebook or parameters in `params.yaml`
+2. Re-run training (`make train` or trigger the Training workflow)
 3. The promotion script automatically compares accuracy and promotes if better
 4. Restart model_service to load the new champion:
    ```bash
@@ -213,15 +252,14 @@ Pipeline stages are defined in `dvc.yaml` with parameters in `params.yaml`.
 ## Development
 
 ```bash
-# Install dev dependencies
-pip install -r requirements-dev.txt
-
-# Run tests (requires services running)
-pytest tests/ --model-service-url=http://localhost:8000 --mlflow-tracking-uri=http://localhost:5000
-
-# Install pre-commit hooks
-pre-commit install
+make install      # Install dev dependencies + pre-commit hooks
+make test-unit    # Run unit tests (no Docker needed)
+make test         # Run full test suite (requires services)
+make lint         # Check code with ruff
+make lint-fix     # Auto-fix lint issues
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full development guidelines.
 
 ## Project Structure
 
@@ -234,19 +272,20 @@ giga-flow-mlops/
 │   ├── dashboard/app.py            # Streamlit UI
 │   └── notebooks/                  # Training notebook
 ├── scripts/promote_model.py        # Model promotion logic
-├── tests/                          # Pytest suite
+├── tests/                          # Pytest suite (14 tests)
+├── .github/workflows/              # CI, Lint, Training workflows
 ├── grafana/                        # Dashboard provisioning
-├── prometheus/                     # Prometheus config & alerts
-├── postgres/                       # DB initialization
+├── prometheus/                     # Config & alert rules
 ├── data/                           # DVC-tracked datasets
-├── docker-compose.yml              # Production orchestration
-├── docker-compose.ci.yml           # CI port overrides
+├── docker-compose.yml              # Production orchestration (13 services)
 ├── Dockerfile                      # Multi-stage app build
-├── mlflow.Dockerfile               # MLflow server
-├── dashboard.Dockerfile            # Streamlit dashboard
-├── dvc.yaml                        # DVC pipeline stages
+├── Makefile                        # Development commands
+├── pyproject.toml                  # Project config (ruff, pytest)
+├── dvc.yaml                        # Reproducible pipeline
 ├── params.yaml                     # Training parameters
-├── requirements.txt                # Python dependencies (pinned)
-├── requirements-inference.txt      # Inference-only dependencies
-└── .pre-commit-config.yaml         # Code quality hooks
+└── requirements.txt                # Pinned dependencies
 ```
+
+## License
+
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
