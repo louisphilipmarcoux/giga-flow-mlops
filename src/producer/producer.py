@@ -42,7 +42,6 @@ def init_producer():
             producer = KafkaProducer(
                 bootstrap_servers=KAFKA_SERVER,
                 value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-                compression_type="lz4",
             )
             logger.info("Kafka producer connected successfully.")
             return producer

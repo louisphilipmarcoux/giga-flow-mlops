@@ -76,7 +76,7 @@ class SentimentPrediction(Base):
     sentiment_score = Column(Float)
     sentiment_label = Column(String)
     message_timestamp = Column(DateTime)
-    processed_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
+    processed_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 # --- Model & Consumer Globals ---
@@ -190,14 +190,10 @@ async def predict(request: PredictionRequest):
 
 
 # --- Kafka Consumer Logic ---
-BATCH_SIZE = 16
-BATCH_TIMEOUT = 0.5  # seconds
-
-
 async def consume_messages():
     """
-    Asynchronous background task to consume messages from Kafka,
-    batch predictions, and write to PostgreSQL.
+    Asynchronous background task to consume messages from Kafka
+    and write predictions to PostgreSQL.
     """
     consumer = None
     delay = 5
@@ -223,72 +219,45 @@ async def consume_messages():
 
     logger.info("Kafka consumer started and polling...")
 
-    batch = []
-
-    async def flush_batch():
-        """Process a batch of messages: predict and write to DB."""
-        nonlocal batch
-        if not batch:
-            return
-
-        current_batch = batch
-        batch = []
-
-        if not model:
-            logger.warning(f"Model not loaded, skipping {len(current_batch)} messages.")
-            return
-
-        # Batch prediction
-        texts = [msg.text for msg in current_batch]
-        data_df = pd.DataFrame({"text": texts})
-
-        start = _time.perf_counter()
-        predictions = model.predict(data_df)
-        latency = _time.perf_counter() - start
-        PREDICTION_LATENCY.observe(latency / len(texts))  # per-item latency
-
-        # Build DB records
-        records = []
-        for kafka_msg, pred in zip(current_batch, predictions, strict=True):
-            sentiment_score = float(pred)
-            sentiment_label = "Positive" if sentiment_score == 1.0 else "Negative"
-            PREDICTIONS_TOTAL.labels(sentiment=sentiment_label).inc()
-            PREDICTION_INPUT_LENGTH.observe(len(kafka_msg.text))
-
-            records.append(
-                SentimentPrediction(
-                    text=kafka_msg.text,
-                    sentiment_score=sentiment_score,
-                    sentiment_label=sentiment_label,
-                    message_timestamp=datetime.datetime.fromtimestamp(kafka_msg.timestamp, tz=datetime.UTC),
-                )
-            )
-
-        # Batch insert to DB
-        async with AsyncSessionLocal() as session, session.begin():
-            session.add_all(records)
-
-        logger.info(f"Batch of {len(records)} predictions saved to database in {latency:.3f}s.")
-
     try:
         async for msg in consumer:
-            # Validate Kafka message with Pydantic
             try:
                 kafka_msg = KafkaMessage(**msg.value)
             except Exception as e:
                 logger.warning(f"Invalid Kafka message, skipping: {e}")
                 continue
 
-            batch.append(kafka_msg)
+            if not model:
+                logger.warning("Model not loaded, skipping message.")
+                continue
 
-            if len(batch) >= BATCH_SIZE:
-                await flush_batch()
+            PREDICTION_INPUT_LENGTH.observe(len(kafka_msg.text))
+            data_df = pd.DataFrame({"text": [kafka_msg.text]})
 
-        # Flush remaining messages
-        await flush_batch()
+            start = _time.perf_counter()
+            prediction = model.predict(data_df)
+            PREDICTION_LATENCY.observe(_time.perf_counter() - start)
 
+            sentiment_score = float(prediction[0])
+            sentiment_label = "Positive" if sentiment_score == 1.0 else "Negative"
+            PREDICTIONS_TOTAL.labels(sentiment=sentiment_label).inc()
+
+            logger.info(f"Prediction: '{kafka_msg.text}' -> {sentiment_label}")
+
+            async with AsyncSessionLocal() as session, session.begin():
+                session.add(
+                    SentimentPrediction(
+                        text=kafka_msg.text,
+                        sentiment_score=sentiment_score,
+                        sentiment_label=sentiment_label,
+                        message_timestamp=datetime.datetime.utcfromtimestamp(kafka_msg.timestamp),
+                    )
+                )
+            logger.info("Prediction saved to database.")
+
+    except Exception as e:
+        logger.error(f"Consumer error: {e}")
     finally:
-        await flush_batch()
         if consumer:
             await consumer.stop()
             logger.info("Kafka consumer stopped.")
