@@ -3,6 +3,7 @@ import datetime
 import json
 import logging
 import os
+import random
 import time as _time
 from contextlib import asynccontextmanager
 
@@ -199,6 +200,12 @@ kafka_consumer_task = None
 lang_pipeline = None
 toxic_pipeline = None
 
+# --- A/B Testing ---
+challenger_model = None
+challenger_info = {"uri": None, "version": None}
+AB_SPLIT = float(os.getenv("AB_SPLIT", "0.0"))  # 0.0 = no A/B, 0.2 = 20% challenger
+AB_PREDICTIONS = Counter("ab_predictions_total", "A/B test predictions", ["variant"])
+
 
 def load_auxiliary_models():
     """Load language detection and toxicity models."""
@@ -360,9 +367,52 @@ async def reload_model(request: ReloadRequest | None = None):
         raise HTTPException(status_code=500, detail=f"Reload failed: {e}") from e
 
 
+class ABTestRequest(BaseModel):
+    challenger_version: int
+    split: float = 0.2  # fraction of traffic to challenger
+
+
+@app.post("/ab-test")
+async def setup_ab_test(request: ABTestRequest):
+    """Set up A/B testing between champion and a challenger version."""
+    global challenger_model, challenger_info, AB_SPLIT
+    model_uri = f"models:/{MLFLOW_MODEL_NAME}/{request.challenger_version}"
+    try:
+        challenger_model = mlflow.pyfunc.load_model(model_uri)
+        challenger_info = {"uri": model_uri, "version": f"v{request.challenger_version}"}
+        AB_SPLIT = max(0.0, min(1.0, request.split))
+        logger.info(f"A/B test started: {AB_SPLIT:.0%} traffic to challenger v{request.challenger_version}")
+        return {"status": "ab_test_started", "split": AB_SPLIT, **challenger_info}
+    except Exception as e:
+        logger.error(f"Failed to load challenger: {e}")
+        raise HTTPException(status_code=500, detail=f"Challenger load failed: {e}") from e
+
+
+@app.delete("/ab-test")
+async def stop_ab_test():
+    """Stop A/B testing, serve only champion."""
+    global challenger_model, challenger_info, AB_SPLIT
+    challenger_model = None
+    challenger_info = {"uri": None, "version": None}
+    AB_SPLIT = 0.0
+    logger.info("A/B test stopped.")
+    return {"status": "ab_test_stopped"}
+
+
+@app.get("/ab-test")
+async def ab_test_status():
+    """Get current A/B test status."""
+    return {
+        "active": challenger_model is not None,
+        "split": AB_SPLIT,
+        "champion": model_info,
+        "challenger": challenger_info,
+    }
+
+
 @app.post("/predict")
 async def predict(request: PredictionRequest):
-    """Performs sentiment + emotion prediction on a single text input."""
+    """Performs sentiment + emotion prediction. Routes to champion or challenger based on A/B split."""
     global model
     if not model:
         raise HTTPException(status_code=503, detail="Model is not loaded yet. Please wait.")
@@ -371,8 +421,14 @@ async def predict(request: PredictionRequest):
         PREDICTION_INPUT_LENGTH.observe(len(request.text))
         data_df = pd.DataFrame({"text": [request.text]})
 
+        # A/B routing
+        use_challenger = challenger_model is not None and random.random() < AB_SPLIT
+        active_model = challenger_model if use_challenger else model
+        variant = "challenger" if use_challenger else "champion"
+        AB_PREDICTIONS.labels(variant=variant).inc()
+
         start = _time.perf_counter()
-        prediction = model.predict(data_df)
+        prediction = active_model.predict(data_df)
         PREDICTION_LATENCY.observe(_time.perf_counter() - start)
 
         result = parse_prediction(prediction.iloc[0])
@@ -401,6 +457,7 @@ async def predict(request: PredictionRequest):
             "language": language,
             "toxicity_score": toxicity_score,
             "is_toxic": is_toxic,
+            "model_variant": variant,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}") from e
