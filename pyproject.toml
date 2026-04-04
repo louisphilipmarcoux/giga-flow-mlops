@@ -1,6 +1,6 @@
 [project]
 name = "giga-flow-mlops"
-version = "1.0.0"
+version = "1.0.0"  # See git tags for release history
 description = "Production-ready end-to-end MLOps pipeline for real-time sentiment analysis"
 readme = "README.md"
 license = {text = "MIT"}
