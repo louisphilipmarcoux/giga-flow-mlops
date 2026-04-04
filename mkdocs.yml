@@ -1,0 +1,30 @@
+site_name: GigaFlow MLOps
+site_url: https://louisphilipmarcoux.github.io/giga-flow-mlops
+site_description: Production-grade MLOps platform for real-time sentiment analysis
+
+repo_name: louisphilipmarcoux/giga-flow-mlops
+repo_url: https://github.com/louisphilipmarcoux/giga-flow-mlops
+
+theme:
+  name: material
+  palette:
+    primary: teal
+    accent: amber
+  features:
+    - navigation.instant
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - API Reference: api-reference.md
+  - Models: models.md
+  - Monitoring: monitoring.md
+
+markdown_extensions:
+  - tables
+  - admonitions
+  - pymdownx.highlight
+  - pymdownx.superfences

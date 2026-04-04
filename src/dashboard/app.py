@@ -620,4 +620,14 @@ while True:
                     display_cols.append("language")
                 st.dataframe(df[display_cols].head(50), use_container_width=True, height=300)
 
+                # CSV Export
+                csv_data = df[display_cols].to_csv(index=False)
+                st.download_button(
+                    "📥 Export CSV",
+                    data=csv_data,
+                    file_name="gigaflow_predictions.csv",
+                    mime="text/csv",
+                    key=f"csv_{total_count}",
+                )
+
     time.sleep(5)
