@@ -297,6 +297,39 @@ with tab_predict:
                         )
                         st.altair_chart(chart, use_container_width=True)
 
+                # --- Explainability ---
+                if st.button("🔎 Explain this prediction", key="explain_btn"):
+                    with st.spinner("Analyzing word importance..."):
+                        try:
+                            exp_resp = requests.post(
+                                f"{MODEL_SERVICE}/explain",
+                                json={"text": user_text},
+                                timeout=60,
+                            )
+                            if exp_resp.status_code == 200:
+                                exp = exp_resp.json()
+                                words = exp.get("explanation", [])
+                                if words:
+                                    # Color words: green = positive contribution, red = negative
+                                    html_parts = []
+                                    for w in words:
+                                        imp = w["importance"]
+                                        if imp > 0.05:
+                                            color = f"rgba(0, 200, 0, {min(abs(imp) * 5, 0.8)})"
+                                        elif imp < -0.05:
+                                            color = f"rgba(255, 0, 0, {min(abs(imp) * 5, 0.8)})"
+                                        else:
+                                            color = "transparent"
+                                        html_parts.append(
+                                            f'<span style="background-color:{color};padding:2px 4px;border-radius:3px">{w["word"]}</span>'
+                                        )
+                                    st.markdown("**Word importance** (green = positive, red = negative):")
+                                    st.markdown(" ".join(html_parts), unsafe_allow_html=True)
+                            else:
+                                st.error(f"Explain failed: {exp_resp.text}")
+                        except Exception as e:
+                            st.error(f"Could not explain: {e}")
+
                 # --- Feedback Section ---
                 st.markdown("---")
                 st.caption("Was this prediction correct?")

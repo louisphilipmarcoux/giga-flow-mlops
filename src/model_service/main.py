@@ -463,6 +463,47 @@ async def predict(request: PredictionRequest):
         raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}") from e
 
 
+# --- Explainability Endpoint ---
+@app.post("/explain")
+async def explain_prediction(request: PredictionRequest):
+    """Explain a prediction by showing word-level sentiment contributions.
+    Uses leave-one-out perturbation: removes each word and measures sentiment change."""
+    global model
+    if not model:
+        raise HTTPException(status_code=503, detail="Model is not loaded yet.")
+
+    try:
+        text = request.text
+        words = text.split()
+        if len(words) < 2:
+            return {"text": text, "explanation": [{"word": text, "importance": 1.0}]}
+
+        # Get baseline prediction
+        base_df = pd.DataFrame({"text": [text]})
+        base_pred = parse_prediction(model.predict(base_df).iloc[0])
+        base_score = base_pred.get("sentiment_score", 0.5)
+
+        # Perturb each word and measure impact
+        explanations = []
+        for i, word in enumerate(words[:30]):  # Limit to first 30 words for speed
+            perturbed = " ".join(words[:i] + words[i + 1 :])
+            if not perturbed.strip():
+                continue
+            perturbed_df = pd.DataFrame({"text": [perturbed]})
+            perturbed_pred = parse_prediction(model.predict(perturbed_df).iloc[0])
+            perturbed_score = perturbed_pred.get("sentiment_score", 0.5)
+            importance = round(base_score - perturbed_score, 4)
+            explanations.append({"word": word, "importance": importance})
+
+        return {
+            "text": text,
+            "sentiment": base_pred["sentiment_label"],
+            "explanation": explanations,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Explain failed: {str(e)}") from e
+
+
 # --- Feedback Endpoints ---
 @app.post("/feedback")
 async def submit_feedback(request: FeedbackRequest):
