@@ -4,7 +4,7 @@
 # Build & push:
 #   docker build -f base.Dockerfile -t louisphilip/gigaflow-base:inference .
 #   docker push louisphilip/gigaflow-base:inference
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential curl && \
     rm -rf /var/lib/apt/lists/*
