@@ -13,7 +13,7 @@ accelerate==1.13.0
 evidently==0.7.21
 # CPU-only PyTorch (saves ~1.5GB vs full torch)
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.6.0
+torch==2.11.0+cpu
 
 # --- Metrics ---
 prometheus_client==0.24.1
