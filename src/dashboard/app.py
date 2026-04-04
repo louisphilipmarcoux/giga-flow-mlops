@@ -298,7 +298,9 @@ with tab_predict:
                         st.altair_chart(chart, use_container_width=True)
 
                 # --- Explainability ---
-                st.caption("*Word importance is approximate (leave-one-out perturbation). Results may vary for short or ambiguous texts.*")
+                st.caption(
+                    "*Word importance is approximate (leave-one-out perturbation). Results may vary for short or ambiguous texts.*"
+                )
                 if st.button("🔎 Explain this prediction", key="explain_btn"):
                     with st.spinner("Analyzing word importance..."):
                         try:
