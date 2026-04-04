@@ -1,7 +1,7 @@
 # --- Core Application ---
 fastapi==0.135.3
 uvicorn[standard]==0.42.0
-pandas==2.2.3
+pandas==3.0.2
 sqlalchemy==2.0.48
 starlette-prometheus==0.10.0
 aiohttp==3.13.5
