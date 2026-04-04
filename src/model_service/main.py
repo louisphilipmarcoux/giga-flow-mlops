@@ -488,21 +488,21 @@ async def ab_test_status():
 
 @app.post("/predict")
 @limiter.limit(RATE_LIMIT)
-async def predict(request: PredictionRequest, req: Request, _auth: bool = Depends(verify_api_key)):
+async def predict(request: Request, body: PredictionRequest, _auth: bool = Depends(verify_api_key)):
     """Performs sentiment + emotion prediction with caching, auth, and rate limiting."""
     global model
     if not model:
         raise HTTPException(status_code=503, detail="Model is not loaded yet. Please wait.")
 
     # Check cache
-    cached = cache_get(request.text)
+    cached = cache_get(body.text)
     if cached:
         cached["cached"] = True
         return cached
 
     try:
-        PREDICTION_INPUT_LENGTH.observe(len(request.text))
-        data_df = pd.DataFrame({"text": [request.text]})
+        PREDICTION_INPUT_LENGTH.observe(len(body.text))
+        data_df = pd.DataFrame({"text": [body.text]})
 
         # A/B routing
         use_challenger = challenger_model is not None and random.random() < AB_SPLIT
@@ -523,8 +523,8 @@ async def predict(request: PredictionRequest, req: Request, _auth: bool = Depend
             EMOTIONS_TOTAL.labels(emotion=top_emotion).inc()
 
         # Multi-task: language + toxicity
-        language = detect_language(request.text)
-        toxicity_score, is_toxic = detect_toxicity(request.text)
+        language = detect_language(body.text)
+        toxicity_score, is_toxic = detect_toxicity(body.text)
 
         if language:
             LANGUAGES_TOTAL.labels(language=language).inc()
@@ -532,7 +532,7 @@ async def predict(request: PredictionRequest, req: Request, _auth: bool = Depend
             TOXIC_TOTAL.inc()
 
         response = {
-            "text": request.text,
+            "text": body.text,
             "sentiment_label": sentiment_label,
             "sentiment_score": result.get("sentiment_score", 0),
             "top_emotion": top_emotion,
@@ -545,7 +545,7 @@ async def predict(request: PredictionRequest, req: Request, _auth: bool = Depend
         }
 
         # Cache the result
-        cache_set(request.text, response)
+        cache_set(body.text, response)
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}") from e
@@ -558,17 +558,17 @@ class BatchPredictionRequest(BaseModel):
 
 @app.post("/predict/batch")
 @limiter.limit("10/minute")
-async def predict_batch(request: BatchPredictionRequest, req: Request, _auth: bool = Depends(verify_api_key)):
+async def predict_batch(request: Request, body: BatchPredictionRequest, _auth: bool = Depends(verify_api_key)):
     """Batch prediction for multiple texts at once. Max 100 texts per request."""
     global model
     if not model:
         raise HTTPException(status_code=503, detail="Model is not loaded yet.")
 
-    if len(request.texts) > 100:
+    if len(body.texts) > 100:
         raise HTTPException(status_code=400, detail="Maximum 100 texts per batch.")
 
     results = []
-    for text in request.texts:
+    for text in body.texts:
         # Check cache first
         cached = cache_get(text)
         if cached:
