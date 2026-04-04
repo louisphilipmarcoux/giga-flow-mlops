@@ -627,7 +627,7 @@ while True:
                     data=csv_data,
                     file_name="gigaflow_predictions.csv",
                     mime="text/csv",
-                    key=f"csv_{total_count}",
+                    key=f"csv_{int(time.time())}",
                 )
 
     time.sleep(5)
