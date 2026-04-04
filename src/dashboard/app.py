@@ -286,14 +286,14 @@ with tab_predict:
                             .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
                             .encode(
                                 x=alt.X("Score:Q", scale=alt.Scale(domain=[0, 1]), title="Confidence"),
-                                y=alt.Y("Emotion:N", sort="-x", title=""),
+                                y=alt.Y("Emotion:N", sort="-x", title="", axis=alt.Axis(labelLimit=200)),
                                 color=alt.Color(
                                     "Score:Q",
                                     scale=alt.Scale(scheme="viridis"),
                                     legend=None,
                                 ),
                             )
-                            .properties(height=200, title="Emotion Breakdown")
+                            .properties(height=250, title="Emotion Breakdown")
                         )
                         st.altair_chart(chart, use_container_width=True)
 
