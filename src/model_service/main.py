@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import hashlib
 import json
 import logging
 import os
@@ -9,11 +10,16 @@ from contextlib import asynccontextmanager
 
 import mlflow
 import pandas as pd
+import redis
 import sqlalchemy
 from aiokafka import AIOKafkaConsumer
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.security import APIKeyHeader
 from prometheus_client import Counter, Histogram
 from pydantic import BaseModel, field_validator
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -74,6 +80,15 @@ MLFLOW_MODEL_NAME = "giga-flow-sentiment"
 MLFLOW_MODEL_ALIAS = "champion"
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://gigaflow:password@localhost:5432/sentiment_db")
+
+# Auth & Rate Limiting
+API_KEYS = set(os.getenv("API_KEYS", "").split(",")) - {""}  # comma-separated keys, empty = no auth
+RATE_LIMIT = os.getenv("RATE_LIMIT", "60/minute")
+AUTH_ENABLED = bool(API_KEYS)
+
+# Redis Cache
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+CACHE_TTL = int(os.getenv("CACHE_TTL", "3600"))  # 1 hour default
 
 # Auxiliary model names (loaded separately from MLflow sentiment model)
 LANG_MODEL_NAME = os.getenv("LANG_MODEL_NAME", "papluca/xlm-roberta-base-language-detection")
@@ -305,8 +320,67 @@ async def lifespan(app):
             logger.info("Kafka consumer task cancelled.")
 
 
+# --- Rate Limiter ---
+limiter = Limiter(key_func=get_remote_address, default_limits=[RATE_LIMIT])
+
+# --- Redis Cache ---
+redis_client = None
+try:
+    redis_client = redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
+    redis_client.ping()
+    logger.info("Redis cache connected.")
+except Exception:
+    redis_client = None
+    logger.info("Redis not available — caching disabled.")
+
+
+def cache_get(text: str) -> dict | None:
+    """Get cached prediction for text."""
+    if redis_client is None:
+        return None
+    try:
+        key = f"pred:{hashlib.md5(text.encode()).hexdigest()}"
+        cached = redis_client.get(key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+    return None
+
+
+def cache_set(text: str, result: dict):
+    """Cache a prediction result."""
+    if redis_client is None:
+        return
+    try:
+        key = f"pred:{hashlib.md5(text.encode()).hexdigest()}"
+        redis_client.setex(key, CACHE_TTL, json.dumps(result))
+    except Exception:
+        pass
+
+
+# --- API Key Authentication ---
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(api_key: str | None = Depends(api_key_header)):
+    """Verify API key if authentication is enabled."""
+    if not AUTH_ENABLED:
+        return True
+    if api_key is None or api_key not in API_KEYS:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return True
+
+
 # --- FastAPI App ---
 app = FastAPI(title="GigaFlow Model Service", lifespan=lifespan)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+
 
 app.add_middleware(PrometheusMiddleware)
 app.add_route("/metrics", metrics)
@@ -411,11 +485,18 @@ async def ab_test_status():
 
 
 @app.post("/predict")
-async def predict(request: PredictionRequest):
-    """Performs sentiment + emotion prediction. Routes to champion or challenger based on A/B split."""
+@limiter.limit(RATE_LIMIT)
+async def predict(request: PredictionRequest, req: Request, _auth: bool = Depends(verify_api_key)):
+    """Performs sentiment + emotion prediction with caching, auth, and rate limiting."""
     global model
     if not model:
         raise HTTPException(status_code=503, detail="Model is not loaded yet. Please wait.")
+
+    # Check cache
+    cached = cache_get(request.text)
+    if cached:
+        cached["cached"] = True
+        return cached
 
     try:
         PREDICTION_INPUT_LENGTH.observe(len(request.text))
@@ -448,7 +529,7 @@ async def predict(request: PredictionRequest):
         if is_toxic:
             TOXIC_TOTAL.inc()
 
-        return {
+        response = {
             "text": request.text,
             "sentiment_label": sentiment_label,
             "sentiment_score": result.get("sentiment_score", 0),
@@ -458,9 +539,61 @@ async def predict(request: PredictionRequest):
             "toxicity_score": toxicity_score,
             "is_toxic": is_toxic,
             "model_variant": variant,
+            "cached": False,
         }
+
+        # Cache the result
+        cache_set(request.text, response)
+        return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}") from e
+
+
+# --- Batch Prediction Endpoint ---
+class BatchPredictionRequest(BaseModel):
+    texts: list[str]
+
+
+@app.post("/predict/batch")
+@limiter.limit("10/minute")
+async def predict_batch(request: BatchPredictionRequest, req: Request, _auth: bool = Depends(verify_api_key)):
+    """Batch prediction for multiple texts at once. Max 100 texts per request."""
+    global model
+    if not model:
+        raise HTTPException(status_code=503, detail="Model is not loaded yet.")
+
+    if len(request.texts) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 texts per batch.")
+
+    results = []
+    for text in request.texts:
+        # Check cache first
+        cached = cache_get(text)
+        if cached:
+            cached["cached"] = True
+            results.append(cached)
+            continue
+
+        data_df = pd.DataFrame({"text": [text]})
+        prediction = model.predict(data_df)
+        result = parse_prediction(prediction.iloc[0])
+        language = detect_language(text)
+        toxicity_score, is_toxic = detect_toxicity(text)
+
+        pred_result = {
+            "text": text,
+            "sentiment_label": result["sentiment_label"],
+            "sentiment_score": result.get("sentiment_score", 0),
+            "top_emotion": result.get("top_emotion", ""),
+            "language": language,
+            "toxicity_score": toxicity_score,
+            "is_toxic": is_toxic,
+            "cached": False,
+        }
+        cache_set(text, pred_result)
+        results.append(pred_result)
+
+    return {"predictions": results, "count": len(results)}
 
 
 # --- Explainability Endpoint ---

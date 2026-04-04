@@ -18,6 +18,10 @@ torch==2.6.0
 # --- Metrics ---
 prometheus_client==0.24.1
 
+# --- Auth & Caching ---
+slowapi==0.1.9
+redis==5.2.1
+
 # --- Connectors ---
 kafka-python-ng==2.2.3
 aiokafka==0.13.0
