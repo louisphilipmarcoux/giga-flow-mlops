@@ -597,10 +597,20 @@ async def predict_batch(request: BatchPredictionRequest, req: Request, _auth: bo
 
 
 # --- Explainability Endpoint ---
+def _get_positive_score(pred_result):
+    """Extract a continuous positive score from prediction result for explainability."""
+    emotions = pred_result.get("emotions", {})
+    if emotions:
+        pos_score = sum(emotions.get(e, 0) for e in POSITIVE_EMOTIONS if e in emotions)
+        neg_score = sum(emotions.get(e, 0) for e in NEGATIVE_EMOTIONS if e in emotions)
+        return pos_score - neg_score
+    return pred_result.get("sentiment_score", 0.5)
+
+
 @app.post("/explain")
 async def explain_prediction(request: PredictionRequest):
-    """Explain a prediction by showing word-level sentiment contributions.
-    Uses leave-one-out perturbation: removes each word and measures sentiment change."""
+    """Explain a prediction by showing word-level contributions.
+    Uses leave-one-out perturbation with emotion scores for continuous gradients."""
     global model
     if not model:
         raise HTTPException(status_code=503, detail="Model is not loaded yet.")
@@ -611,20 +621,20 @@ async def explain_prediction(request: PredictionRequest):
         if len(words) < 2:
             return {"text": text, "explanation": [{"word": text, "importance": 1.0}]}
 
-        # Get baseline prediction
+        # Get baseline score using emotion-derived continuous score
         base_df = pd.DataFrame({"text": [text]})
         base_pred = parse_prediction(model.predict(base_df).iloc[0])
-        base_score = base_pred.get("sentiment_score", 0.5)
+        base_score = _get_positive_score(base_pred)
 
         # Perturb each word and measure impact
         explanations = []
-        for i, word in enumerate(words[:30]):  # Limit to first 30 words for speed
+        for i, word in enumerate(words[:20]):  # Limit for speed
             perturbed = " ".join(words[:i] + words[i + 1 :])
             if not perturbed.strip():
                 continue
             perturbed_df = pd.DataFrame({"text": [perturbed]})
             perturbed_pred = parse_prediction(model.predict(perturbed_df).iloc[0])
-            perturbed_score = perturbed_pred.get("sentiment_score", 0.5)
+            perturbed_score = _get_positive_score(perturbed_pred)
             importance = round(base_score - perturbed_score, 4)
             explanations.append({"word": word, "importance": importance})
 
