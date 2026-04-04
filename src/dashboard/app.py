@@ -86,6 +86,168 @@ LANGUAGE_EXAMPLES = {
     ],
 }
 
+# --- Language Names ---
+LANGUAGE_NAMES = {
+    "en": "English",
+    "fr": "French",
+    "es": "Spanish",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "ru": "Russian",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "tr": "Turkish",
+    "pl": "Polish",
+    "sv": "Swedish",
+    "da": "Danish",
+    "fi": "Finnish",
+    "no": "Norwegian",
+    "cs": "Czech",
+    "ro": "Romanian",
+    "hu": "Hungarian",
+    "el": "Greek",
+    "he": "Hebrew",
+    "th": "Thai",
+    "vi": "Vietnamese",
+    "id": "Indonesian",
+    "ms": "Malay",
+    "sw": "Swahili",
+    "uk": "Ukrainian",
+    "bg": "Bulgarian",
+    "hr": "Croatian",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "lt": "Lithuanian",
+    "lv": "Latvian",
+    "et": "Estonian",
+    "ca": "Catalan",
+    "gl": "Galician",
+    "eu": "Basque",
+    "af": "Afrikaans",
+    "sq": "Albanian",
+    "mk": "Macedonian",
+    "sr": "Serbian",
+    "bs": "Bosnian",
+    "is": "Icelandic",
+    "mt": "Maltese",
+    "ga": "Irish",
+    "cy": "Welsh",
+    "la": "Latin",
+    "tl": "Tagalog",
+    "ur": "Urdu",
+    "bn": "Bengali",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "ml": "Malayalam",
+    "kn": "Kannada",
+    "mr": "Marathi",
+    "gu": "Gujarati",
+    "pa": "Punjabi",
+}
+
+# --- Localized Labels ---
+LOCALIZED_SENTIMENTS = {
+    "en": {"Positive": "Positive", "Negative": "Negative", "Neutral": "Neutral"},
+    "fr": {"Positive": "Positif", "Negative": "Négatif", "Neutral": "Neutre"},
+    "es": {"Positive": "Positivo", "Negative": "Negativo", "Neutral": "Neutro"},
+    "de": {"Positive": "Positiv", "Negative": "Negativ", "Neutral": "Neutral"},
+    "it": {"Positive": "Positivo", "Negative": "Negativo", "Neutral": "Neutrale"},
+    "pt": {"Positive": "Positivo", "Negative": "Negativo", "Neutral": "Neutro"},
+    "nl": {"Positive": "Positief", "Negative": "Negatief", "Neutral": "Neutraal"},
+    "ja": {"Positive": "ポジティブ", "Negative": "ネガティブ", "Neutral": "ニュートラル"},
+    "zh": {"Positive": "积极", "Negative": "消极", "Neutral": "中性"},
+    "ko": {"Positive": "긍정적", "Negative": "부정적", "Neutral": "중립적"},
+    "ar": {"Positive": "إيجابي", "Negative": "سلبي", "Neutral": "محايد"},
+    "ru": {"Positive": "Положительный", "Negative": "Отрицательный", "Neutral": "Нейтральный"},
+}
+
+LOCALIZED_EMOTIONS = {
+    "en": {},  # default English labels
+    "fr": {
+        "joy": "joie",
+        "love": "amour",
+        "admiration": "admiration",
+        "approval": "approbation",
+        "anger": "colère",
+        "sadness": "tristesse",
+        "fear": "peur",
+        "disgust": "dégoût",
+        "surprise": "surprise",
+        "neutral": "neutre",
+        "curiosity": "curiosité",
+        "confusion": "confusion",
+        "excitement": "enthousiasme",
+        "disappointment": "déception",
+        "annoyance": "agacement",
+        "gratitude": "gratitude",
+        "optimism": "optimisme",
+    },
+    "es": {
+        "joy": "alegría",
+        "love": "amor",
+        "admiration": "admiración",
+        "approval": "aprobación",
+        "anger": "ira",
+        "sadness": "tristeza",
+        "fear": "miedo",
+        "disgust": "asco",
+        "surprise": "sorpresa",
+        "neutral": "neutro",
+        "curiosity": "curiosidad",
+        "confusion": "confusión",
+        "excitement": "emoción",
+        "disappointment": "decepción",
+        "annoyance": "molestia",
+        "gratitude": "gratitud",
+        "optimism": "optimismo",
+    },
+    "de": {
+        "joy": "Freude",
+        "love": "Liebe",
+        "admiration": "Bewunderung",
+        "approval": "Zustimmung",
+        "anger": "Wut",
+        "sadness": "Traurigkeit",
+        "fear": "Angst",
+        "disgust": "Ekel",
+        "surprise": "Überraschung",
+        "neutral": "neutral",
+        "curiosity": "Neugier",
+        "confusion": "Verwirrung",
+        "excitement": "Begeisterung",
+        "disappointment": "Enttäuschung",
+        "annoyance": "Ärger",
+        "gratitude": "Dankbarkeit",
+        "optimism": "Optimismus",
+    },
+}
+
+
+def get_language_name(code):
+    """Convert language code to full name."""
+    if not code:
+        return None
+    return LANGUAGE_NAMES.get(code, code.upper())
+
+
+def localize_sentiment(label, lang_code):
+    """Get localized sentiment label."""
+    lang = lang_code if lang_code in LOCALIZED_SENTIMENTS else "en"
+    return LOCALIZED_SENTIMENTS.get(lang, LOCALIZED_SENTIMENTS["en"]).get(label, label)
+
+
+def localize_emotion(emotion, lang_code):
+    """Get localized emotion label."""
+    lang = lang_code if lang_code in LOCALIZED_EMOTIONS else "en"
+    translations = LOCALIZED_EMOTIONS.get(lang, {})
+    return translations.get(emotion, emotion)
+
+
 # --- Streamlit App ---
 
 st.set_page_config(page_title="GigaFlow Live Sentiment", page_icon="🚀", layout="wide")
@@ -231,6 +393,19 @@ EMOJI_MAP = {"Positive": "😊", "Negative": "😡", "Neutral": "😐"}
 with tab_predict:
     st.header("🔬 Test the Model")
 
+    with st.expander("🌍 Supported Languages"):
+        col_s, col_e = st.columns(2)
+        with col_s:
+            st.markdown("**Sentiment** (16+ languages)")
+            st.markdown(
+                "English, French, Spanish, German, Italian, Portuguese, "
+                "Dutch, Russian, Chinese, Japanese, Korean, Arabic, "
+                "Hindi, Turkish, Vietnamese, Polish"
+            )
+        with col_e:
+            st.markdown("**Emotions** (6+ languages)")
+            st.markdown("English, French, Spanish, German, Italian, Dutch")
+
     col_input, col_lang = st.columns([3, 1])
     with col_lang:
         language = st.selectbox("Language examples:", list(LANGUAGE_EXAMPLES.keys()))
@@ -261,13 +436,24 @@ with tab_predict:
                 col_result, col_emotions = st.columns([1, 2])
 
                 with col_result:
-                    st.markdown(f"### {emoji} {sentiment}")
+                    lang_code = pred.get("language", "en")
+                    lang_name = get_language_name(lang_code)
+                    localized_sent = localize_sentiment(sentiment, lang_code)
+
+                    st.markdown(f"### {emoji} {localized_sent}")
+                    if localized_sent != sentiment:
+                        st.caption(f"({sentiment})")
+
                     top_emotion = pred.get("top_emotion", "")
                     if top_emotion:
-                        st.metric("Top Emotion", top_emotion)
-                    lang = pred.get("language")
-                    if lang:
-                        st.metric("Language", lang)
+                        localized_emo = localize_emotion(top_emotion, lang_code)
+                        st.metric("Top Emotion", localized_emo)
+                        if localized_emo != top_emotion:
+                            st.caption(f"({top_emotion})")
+
+                    if lang_name:
+                        st.metric("Language", lang_name)
+
                     is_toxic = pred.get("is_toxic")
                     if is_toxic:
                         st.error("⚠️ Toxic content detected!")
@@ -277,8 +463,9 @@ with tab_predict:
                 with col_emotions:
                     emotions = pred.get("emotions", {})
                     if emotions:
+                        # Localize emotion labels
                         emotion_df = pd.DataFrame(
-                            [{"Emotion": k, "Score": v} for k, v in emotions.items()]
+                            [{"Emotion": localize_emotion(k, lang_code), "Score": v} for k, v in emotions.items()]
                         ).sort_values("Score", ascending=False)
 
                         chart = (
@@ -565,6 +752,7 @@ while True:
                 st.subheader("Language Distribution")
                 lang_df = load_language_counts()
                 if not lang_df.empty:
+                    lang_df["language"] = lang_df["language"].apply(get_language_name)
                     chart = (
                         alt.Chart(lang_df)
                         .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
@@ -621,7 +809,10 @@ while True:
                     display_cols.append("top_emotion")
                 if "language" in df.columns:
                     display_cols.append("language")
-                st.dataframe(df[display_cols].head(50), use_container_width=True, height=300)
+                display_df = df[display_cols].head(50).copy()
+                if "language" in display_df.columns:
+                    display_df["language"] = display_df["language"].apply(get_language_name)
+                st.dataframe(display_df, use_container_width=True, height=300)
 
                 # CSV Export
                 csv_data = df[display_cols].to_csv(index=False)
