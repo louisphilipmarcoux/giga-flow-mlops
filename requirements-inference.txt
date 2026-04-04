@@ -8,7 +8,7 @@ aiohttp==3.13.5
 
 # --- Data & ML ---
 mlflow==2.9.2
-transformers==4.49.0
+transformers==5.5.0
 accelerate==1.13.0
 evidently==0.7.21
 # CPU-only PyTorch (saves ~1.5GB vs full torch)
