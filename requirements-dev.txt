@@ -5,3 +5,6 @@
 pytest==9.0.2
 httpx==0.28.1
 pytest-mock==3.15.1
+
+# --- Load Testing ---
+locust==2.32.6

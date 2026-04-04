@@ -264,19 +264,23 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full development guidelines.
 ```
 giga-flow-mlops/
 ├── src/
-│   ├── model_service/main.py      # FastAPI inference + Kafka consumer
-│   ├── producer/producer.py        # Kafka data producer
-│   ├── drift_monitor/monitor.py    # Evidently drift detection
-│   ├── dashboard/app.py            # Streamlit UI
-│   └── notebooks/                  # Training notebook
+│   ├── model_service/main.py      # FastAPI: sentiment, emotions, language, toxicity
+│   ├── producer/producer.py        # Kafka producer (120+ multilingual messages)
+│   ├── drift_monitor/monitor.py    # Drift detection + auto-retraining
+│   ├── dashboard/app.py            # Streamlit UI (test, dashboard, model registry)
+│   └── notebooks/                  # Training notebook (dual-model architecture)
 ├── scripts/promote_model.py        # Model promotion logic
-├── tests/                          # Pytest suite (14 tests)
+├── tests/                          # Pytest + Locust load tests
+│   └── locustfile.py               # Load testing configuration
+├── k8s/                            # Kubernetes deployment manifests
 ├── .github/workflows/              # CI, Lint, Training workflows
 ├── grafana/                        # Dashboard provisioning
 ├── prometheus/                     # Config & alert rules
 ├── data/                           # DVC-tracked datasets
 ├── docker-compose.yml              # Production orchestration (13 services)
-├── Dockerfile                      # Multi-stage app build
+├── Dockerfile                      # Multi-stage app build (inference)
+├── training.Dockerfile             # Training container
+├── base.Dockerfile                 # Pre-built base image
 ├── Makefile                        # Development commands
 ├── pyproject.toml                  # Project config (ruff, pytest)
 ├── dvc.yaml                        # Reproducible pipeline

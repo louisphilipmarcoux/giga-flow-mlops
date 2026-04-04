@@ -62,6 +62,13 @@ install: ## Install development dependencies
 	pip install -r requirements-dev.txt
 	pre-commit install
 
+load-test: ## Run load tests with Locust (open http://localhost:8089)
+	locust -f tests/locustfile.py --host http://localhost:8000
+
+k8s-deploy: ## Deploy to Kubernetes
+	kubectl apply -f k8s/secrets.yaml
+	kubectl apply -f k8s/model-service.yaml
+
 base-build: ## Build and push base Docker images (one-time, slow)
 	docker build -f base.Dockerfile -t louisphilip/gigaflow-base:inference .
 	docker build -f base-training.Dockerfile -t louisphilip/gigaflow-base:training .
