@@ -27,4 +27,4 @@ boto3==1.42.82
 
 # --- Training (needed in producer container) ---
 nbconvert==7.17.0
-ipykernel==6.29.5
+ipykernel==7.2.0
