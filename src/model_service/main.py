@@ -185,11 +185,10 @@ def parse_prediction(prediction_row):
                 if top_emotion in NEUTRAL_EMOTIONS:
                     data["sentiment_label"] = "Neutral"
                     data["sentiment_score"] = 0.5
-                # Mixed signal: weak positive emotion + negative emotions present → Neutral
+                # Only override to Neutral if top positive emotion is very weak
                 elif top_emotion in POSITIVE_EMOTIONS:
                     top_score = emotions.get(top_emotion, 1.0)
-                    neg_total = sum(emotions.get(e, 0) for e in emotions if e in NEGATIVE_EMOTIONS)
-                    if top_score < 0.5 or (neg_total > top_score * 0.3):
+                    if top_score < 0.3:
                         data["sentiment_label"] = "Neutral"
                         data["sentiment_score"] = 0.5
 
